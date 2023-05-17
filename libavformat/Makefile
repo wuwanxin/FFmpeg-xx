@@ -291,6 +291,7 @@ OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o avc.o hevc.o vpcc.o \
 OBJS-$(CONFIG_MP2_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_MP3_DEMUXER)               += mp3dec.o replaygain.o
 OBJS-$(CONFIG_MP3_MUXER)                 += mp3enc.o rawenc.o id3v2enc.o
+OBJS-$(CONFIG_SRM_MUXER)                 += srmenc.o
 OBJS-$(CONFIG_MPC_DEMUXER)               += mpc.o apetag.o img2.o
 OBJS-$(CONFIG_MPC8_DEMUXER)              += mpc8.o apetag.o img2.o
 OBJS-$(CONFIG_MPEG1SYSTEM_MUXER)         += mpegenc.o
