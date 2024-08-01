@@ -1255,6 +1255,11 @@ OBJS-$(HAVE_THREADS)                   += pthread.o pthread_slice.o pthread_fram
 
 OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 
+
+# lbvc (individual)
+#CONFIG_LIBLBVC_ENCODER
+OBJS-$(CONFIG_LBVC_ENCODER)            += lbvenc.o
+
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avcodecres.o
 

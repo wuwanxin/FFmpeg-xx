@@ -34,6 +34,13 @@
 static const AVCodecDescriptor codec_descriptors[] = {
     /* video codecs */
     {
+        .id        = AV_CODEC_ID_LBVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "lbvenc",
+        .long_name = NULL_IF_CONFIG_SMALL("Low-Bitrate-Codec video"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
         .id        = AV_CODEC_ID_MPEG1VIDEO,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "mpeg1video",

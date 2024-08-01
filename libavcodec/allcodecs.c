@@ -805,6 +805,10 @@ extern const FFCodec ff_libvpx_vp9_decoder;
 extern const FFCodec ff_libwebp_anim_encoder;
 extern const FFCodec ff_libwebp_encoder;
 extern const FFCodec ff_libx262_encoder;
+
+/* individual encoder */
+extern const FFCodec ff_lbvc_encoder;
+
 #if CONFIG_LIBX264_ENCODER
 #include <x264.h>
 #if X264_BUILD < 153
