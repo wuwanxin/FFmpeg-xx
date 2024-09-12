@@ -808,6 +808,7 @@ extern const FFCodec ff_libx262_encoder;
 
 /* individual encoder */
 extern const FFCodec ff_lbvc_encoder;
+extern const FFCodec ff_e2enc_encoder;
 
 #if CONFIG_LIBX264_ENCODER
 #include <x264.h>

@@ -1259,6 +1259,7 @@ OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 # lbvc (individual)
 #CONFIG_LIBLBVC_ENCODER
 OBJS-$(CONFIG_LBVC_ENCODER)            += lbvenc.o
+OBJS-$(CONFIG_E2ENC_ENCODER)            += e2enc.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avcodecres.o
