@@ -48,6 +48,7 @@
  */
 enum AVCodecID {
     AV_CODEC_ID_NONE,
+    AV_CODEC_ID_NUHD_NORMAL,
     AV_CODEC_ID_LBVC,
     AV_CODEC_ID_E2ENC,
     /* video codecs */

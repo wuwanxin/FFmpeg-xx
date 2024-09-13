@@ -24,6 +24,8 @@
 #include <string.h>
 #include <mediaass/sevc_enc.h>
 
+#include "bytestream.h"
+#define enc_streaming 1
 typedef struct {
     AVClass *class;
     // 这里可以添加你的编码器需要的其他字段
@@ -34,13 +36,11 @@ typedef struct {
 static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len){
     printf("enter __base_encode_callback_function %dx%d  \n",w,h);
     if(yuv && recon){
+
         char command[200];
         sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
         system(command);
-        
 
-        
-        
         FILE* fp_recon = fopen("./rec.yuv", "rb");
         fread(recon, 1, w * h * 3 / 2 , fp_recon);
         fclose(fp_recon);
@@ -52,7 +52,7 @@ static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *r
         fread(str, 1, file_size , fp_bin);
         fclose(fp_bin);
         *str_len = file_size;
-        
+
     }else {
         printf("buffer can not be null \n");
     }
@@ -80,11 +80,12 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     //open file
 
     //init sevc 
-            
+
+#if enc_streaming      
     sevc_encode_init(_coded_width,_coded_height);
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
-    
+#endif
     return 0;
 }
 
@@ -93,11 +94,16 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     AVFrame *tmp;
     int ret = -1;
+    PutByteContext pb;
+    PutByteContext pb_base;
+    SEVC_BASEENC_OUTPUT_FRAME out;
     if(!frame){
         *got_packet = 0;
         return 0;
     }
 
+    int file_size = 0;
+    //printf("new frame lbvc_encode \n");
     tmp = av_frame_alloc();
     if(!tmp){
         printf("av_frame_alloc error. \n");
@@ -113,6 +119,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         printf("av_frame_copy error. \n");
         return ret;
     }
+#if enc_streaming
 
     printf("==============>lbvc_encode<============== \n");
     printf("width :%d \n",tmp->width);
@@ -142,19 +149,58 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
             sevc_encode_push_one_frame(tmp->data[0],tmp->data[1],tmp->data[2]);
             break;
     }
+
     printf("sevc_encode_one_frame start\n");
     ret = sevc_encode_one_frame();
     printf("sevc_encode_one_frame down\n");
+
     if(ret == SEVC_ERRORCODE_NONE_ERROR){
-        int frame_size = 1024*1024*300;
-        ret = av_new_packet(pkt , frame_size);
+        
+        
+        
+        sevc_encode_new_output_frame(&out);
+        sevc_encode_get_frame(&out);
+
+        FILE* fp_bin = NULL;
+        //base
+        fp_bin = fopen("./str.bin", "rb");
+        fseek(fp_bin, 0, SEEK_END);
+        file_size = ftell(fp_bin);
+        rewind(fp_bin);
+        unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
+        fread(base_tmp_buf, 1, file_size , fp_bin);
+        fclose(fp_bin);
+        out.base_size = file_size;
+    
+        ret = av_new_packet(pkt , out.base_size + out.enlayer1_size + out.enlayer2_size  + 1024*100);
         if(ret < 0){
+            printf("av_new_packet error\n");
             return ret;
         }
-        sevc_encode_get_frame(pkt->data,&pkt->size);
+        bytestream2_init_writer(&pb, pkt->data, pkt->size);
+        
+        //base
+        bytestream2_put_be32(&pb, file_size);
+        bytestream2_put_byte(&pb, 0x00);
+        bytestream2_put_buffer(&pb,base_tmp_buf,file_size);
+        free(base_tmp_buf);
+        //system("rm ./str.bin");
+
+        //en1
+        bytestream2_put_be32(&pb, out.enlayer1_size);
+        bytestream2_put_byte(&pb, 0x10);
+        bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer1_size);
+
+        //en2
+        bytestream2_put_be32(&pb, out.enlayer2_size);
+        bytestream2_put_byte(&pb, 0x11);
+        bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer2_size);
+        sevc_encode_free_output_frame(&out);
+        pkt->size = bytestream2_tell_p(&pb);
         //av_image_copy(pkt->data,pkt->size);
         printf("sevc_encode_get_frame size:%d\n",pkt->size);
         *got_packet = 1;
+        //sleep(1000);
     }else if(ret == SEVC_ERRORCODE_RECON_WAIT){
         printf("sevc_encode_one_frame wait.... \n");
         *got_packet = 0;
@@ -164,7 +210,61 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         av_frame_free(&tmp);
         return ret;
     }
+#else   
+    FILE* fp_bin = NULL;
+    int frame_size = 1024*1024*1024*5;
+    ret = av_new_packet(pkt , frame_size);
+    if(ret < 0){
+        return ret;
+    }
+    bytestream2_init_writer(&pb, pkt->data, pkt->size);
+    fp_bin = fopen("./str.bin", "rb");
+    fseek(fp_bin, 0, SEEK_END);
+    file_size = ftell(fp_bin);
+    rewind(fp_bin);
+    bytestream2_put_be32(&pb, file_size);
+    bytestream2_put_byte(&pb, 0x00);
+    unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
+    fread(base_tmp_buf, 1, file_size , fp_bin);
+    fclose(fp_bin);
+    bytestream2_put_buffer(&pb,base_tmp_buf,file_size);
+    free(base_tmp_buf);
+
+    fp_bin = fopen("./dump_buffer_0.bin", "rb");
+    fseek(fp_bin, 0, SEEK_END);
+    file_size = 50000;//ftell(fp_bin);
+    rewind(fp_bin);
+    bytestream2_put_be32(&pb, file_size);
+    bytestream2_put_byte(&pb, 0x10);
+    unsigned char *enlay1_tmp_buf = (unsigned char *)malloc(file_size);
+    fread(enlay1_tmp_buf, 1, file_size , fp_bin);
+    fclose(fp_bin);
+    bytestream2_put_buffer(&pb,enlay1_tmp_buf,file_size);
+    free(enlay1_tmp_buf);
+
+    bytestream2_put_be32(&pb, 15);
+    bytestream2_put_byte(&pb, 0x11);
+    bytestream2_put_byte(&pb, 0x00);
+    bytestream2_put_byte(&pb, 0x01);
+    bytestream2_put_byte(&pb, 0x02);
+    bytestream2_put_byte(&pb, 0x03);
+    bytestream2_put_byte(&pb, 0x04);
+    bytestream2_put_byte(&pb, 0x05);
+    bytestream2_put_byte(&pb, 0x06);
+    bytestream2_put_byte(&pb, 0x07);
+    bytestream2_put_byte(&pb, 0x08);
+    bytestream2_put_byte(&pb, 0x09);
+    bytestream2_put_byte(&pb, 0x0a);
+    bytestream2_put_byte(&pb, 0x0b);
+    bytestream2_put_byte(&pb, 0x0c);
+    bytestream2_put_byte(&pb, 0x0d);
+    bytestream2_put_byte(&pb, 0x0e);
+    bytestream2_put_byte(&pb, 0x0f);
+    usleep(50*1000);
+    pkt->size = bytestream2_tell_p(&pb);;
+    *got_packet = 1;
     
+#endif
     if(tmp) av_frame_free(&tmp);
     return 0;
 }
