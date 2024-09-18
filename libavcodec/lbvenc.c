@@ -25,6 +25,23 @@
 #include <mediaass/sevc_enc.h>
 
 #include "bytestream.h"
+
+//baseenc vcu
+
+#ifdef hw_vcu
+#include "lib_common/PixMapBuffer.h"
+#include "lib_common/BufferStreamMeta.h"
+#include "lib_common/BufferPictureMeta.h"
+#include "lib_common/StreamBuffer.h"
+#include "lib_common/Error.h"
+#include "lib_encode/lib_encoder.h"
+#include "lib_rtos/lib_rtos.h"
+#include "lib_common_enc/RateCtrlMeta.h"
+#include "lib_common_enc/IpEncFourCC.h"
+#include "lib_common_enc/EncBuffers.h"
+
+#endif
+
 #define enc_streaming 1
 typedef struct {
     AVClass *class;
@@ -38,7 +55,8 @@ static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *r
     if(yuv && recon){
 
         char command[200];
-        sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
+        //sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
+        sprintf(command, "bash ./base_encode_test.sh");
         system(command);
 
         FILE* fp_recon = fopen("./rec.yuv", "rb");
@@ -85,6 +103,15 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     sevc_encode_init(_coded_width,_coded_height);
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
+#endif
+
+#ifdef hw_vcu
+    //baseenc
+    AL_ELibEncoderArch eArch = AL_LIB_ENCODER_ARCH_HOST;
+    if(AL_Lib_Encoder_Init(eArch) != AL_SUCCESS){
+        printf("error AL_Lib_Encoder_Init\n");
+        return -1;
+    }
 #endif
     return 0;
 }
