@@ -80,7 +80,7 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
     uint8_t *pos = gb.buffer + start; 
     size_t i = 0;
     while (i < size) {
-        
+
         if (i <= (size - 4) && (AV_RB32(pos + i) == 0x00000001)) {
             
             //memmove(buf + i + 4, buf + i + 4 - 1, size - (i + 4));
@@ -92,6 +92,7 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
             size += 3; 
             i += 4;
         }
+
 #if 1
         else if (i <= (size - 3) && (AV_RB24(pos + i) == 0x000001)) {
             
@@ -104,6 +105,15 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
         }
 #endif
         else {
+#if 0 //debug code
+            static FILE *debug_log = NULL;
+            if(!debug_log) debug_log = fopen("./debug.log","w");
+            if(debug_log) {
+                if(i && ((i%16)==0)) fprintf(debug_log,"\n"); 
+                fprintf(debug_log,"0x%02x ",*(pos + i)); 
+                fflush(debug_log);
+            }
+#endif
             i++;
         }
 
@@ -162,8 +172,7 @@ second_field:
         bytestream2_put_byte(&pb, 0x06);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_be32(&pb, size);
-        int ss = bytestream2_tell_p(&gb);
-        modify_bytestream(gb,ss,size);
+        modify_bytestream(gb,0,size);
         bytestream2_copy_buffer(&pb, &gb, size);
 #else
         bytestream2_skip(&gb, size);

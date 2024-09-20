@@ -221,7 +221,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         //en2
         bytestream2_put_be32(&pb, out.enlayer2_size);
         bytestream2_put_byte(&pb, 0x11);
-        bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer2_size);
+        bytestream2_put_buffer(&pb,out.enlayer2_buf,out.enlayer2_size);
         sevc_encode_free_output_frame(&out);
         pkt->size = bytestream2_tell_p(&pb);
         //av_image_copy(pkt->data,pkt->size);
