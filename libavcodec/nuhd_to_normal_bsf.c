@@ -169,7 +169,7 @@ second_field:
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x01);
-        bytestream2_put_byte(&pb, 0x06);
+        bytestream2_put_byte(&pb, 0x27);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_be32(&pb, size);
         modify_bytestream(gb,0,size);
