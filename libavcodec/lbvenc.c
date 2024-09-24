@@ -42,6 +42,8 @@
 
 #endif
 
+#include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
+
 #define enc_streaming 1
 typedef struct {
     AVClass *class;
@@ -104,7 +106,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
 #endif
-
+    vcu_ffmpeg_init();
 #ifdef hw_vcu
     //baseenc
     AL_ELibEncoderArch eArch = AL_LIB_ENCODER_ARCH_HOST;
