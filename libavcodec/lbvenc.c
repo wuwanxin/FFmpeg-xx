@@ -55,6 +55,9 @@ typedef struct {
 static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len){
     printf("enter __base_encode_callback_function %dx%d  \n",w,h);
     if(yuv && recon){
+        FILE* fp_src = fopen("./src.yuv", "wb");
+        fwrite(yuv, 1, w * h * 3 / 2 , fp_src);
+        fclose(fp_src);
 
         char command[200];
         //sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
