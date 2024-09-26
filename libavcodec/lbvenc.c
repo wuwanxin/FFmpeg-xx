@@ -39,10 +39,10 @@
 #include "lib_common_enc/RateCtrlMeta.h"
 #include "lib_common_enc/IpEncFourCC.h"
 #include "lib_common_enc/EncBuffers.h"
-
+#include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
 #endif
 
-#include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
+
 
 #define enc_streaming 1
 typedef struct {
@@ -109,9 +109,11 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
 #endif
-    vcu_ffmpeg_init();
+    
 #ifdef hw_vcu
     //baseenc
+    vcu_ffmpeg_init();
+
     AL_ELibEncoderArch eArch = AL_LIB_ENCODER_ARCH_HOST;
     if(AL_Lib_Encoder_Init(eArch) != AL_SUCCESS){
         printf("error AL_Lib_Encoder_Init\n");
@@ -193,16 +195,16 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         sevc_encode_new_output_frame(&out);
         sevc_encode_get_frame(&out);
 
-        FILE* fp_bin = NULL;
+        // FILE* fp_bin = NULL;
         //base
-        fp_bin = fopen("./str.bin", "rb");
-        fseek(fp_bin, 0, SEEK_END);
-        file_size = ftell(fp_bin);
-        rewind(fp_bin);
-        unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
-        fread(base_tmp_buf, 1, file_size , fp_bin);
-        fclose(fp_bin);
-        out.base_size = file_size;
+        // fp_bin = fopen("./str.bin", "rb");
+        // fseek(fp_bin, 0, SEEK_END);
+        // file_size = ftell(fp_bin);
+        // rewind(fp_bin);
+        // unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
+        // fread(base_tmp_buf, 1, file_size , fp_bin);
+        // fclose(fp_bin);
+        // out.base_size = file_size;
     
         ret = av_new_packet(pkt , out.base_size + out.enlayer1_size + out.enlayer2_size  + 1024*100);
         if(ret < 0){
@@ -212,11 +214,9 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         bytestream2_init_writer(&pb, pkt->data, pkt->size);
         
         //base
-        bytestream2_put_be32(&pb, file_size);
+        bytestream2_put_be32(&pb, out.base_size);
         bytestream2_put_byte(&pb, 0x00);
-        bytestream2_put_buffer(&pb,base_tmp_buf,file_size);
-        free(base_tmp_buf);
-        //system("rm ./str.bin");
+        bytestream2_put_buffer(&pb,out.base_buf,out.base_size);
 
         //en1
         bytestream2_put_be32(&pb, out.enlayer1_size);
