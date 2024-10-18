@@ -27,6 +27,8 @@
 #include "bytestream.h"
 
 //baseenc vcu
+#define hw_vcu
+#define vcu_src_use_shm 0
 
 #ifdef hw_vcu
 #include "lib_common/PixMapBuffer.h"
@@ -40,6 +42,19 @@
 #include "lib_common_enc/IpEncFourCC.h"
 #include "lib_common_enc/EncBuffers.h"
 #include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
+
+#if vcu_src_use_shm
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define SHARE_MEM_NAME "/my_shared_memory"
+#define SHARE_MEM_SIZE (1920 * 1088 * 3)
+static int shm_fd;
+static uint8_t *ptr;
+static uint8_t smem_tmp_buffer[SHARE_MEM_SIZE] = {0};
+#endif
 #endif
 
 
@@ -52,13 +67,66 @@ typedef struct {
     int bypass;
 } LowBitrateEncoderContext;
 
+#if vcu_src_use_shm
+
+static void mmap_shared_memory(){
+    shm_fd = shm_open(SHARE_MEM_NAME, O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open");
+        exit(1);
+    }
+
+    ptr = (uint8_t *)mmap(0, SHARE_MEM_SIZE, PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (ptr == MAP_FAILED) {
+        perror("mmap");
+        exit(1);
+    }
+}
+
+static void close_shared_memory(){
+    if (shm_fd == -1) {
+        perror("close_shared_memory error");
+        exit(1);
+    }
+
+    if (munmap(ptr, SHARE_MEM_SIZE) == -1) {
+        perror("munmap");
+        exit(1);
+    }
+
+    if (close(shm_fd) == -1) {
+        perror("close");
+        exit(1);
+    }
+}
+
+
+static void write_to_shared_memory(uint8_t *ori,int size) {
+
+    if (shm_fd == -1) {
+        perror("write_to_shared_memory error");
+        exit(1);
+    }
+
+    memcpy(ptr,ori,size);
+    
+}
+
+#endif
+
 static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len){
     printf("enter __base_encode_callback_function %dx%d  \n",w,h);
     if(yuv && recon){
-        FILE* fp_src = fopen("./src.yuv", "wb");
-        fwrite(yuv, 1, w * h * 3 / 2 , fp_src);
+#if vcu_src_use_shm
+        write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2);
+        FILE* fp_src = fopen("./src-shm.yuv", "wb");
+        fwrite(ptr, 1, w * h * 3 / 2 , fp_src);           
         fclose(fp_src);
-
+#else
+        FILE* fp_src = fopen("./src.yuv", "wb");
+        fwrite(yuv, 1, w * h * 3 / 2 , fp_src);           
+        fclose(fp_src);
+#endif
         char command[200];
         //sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
         sprintf(command, "bash ./base_encode_test.sh");
@@ -109,8 +177,12 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
 #endif
+
+#if vcu_src_use_shm
+    mmap_shared_memory();
+#endif
     
-#ifdef hw_vcu
+#if 0//def hw_vcu
     //baseenc
     vcu_ffmpeg_init();
 
@@ -309,6 +381,10 @@ static void lbvc_flush(AVCodecContext *avctx)
 static av_cold int lbvc_close(AVCodecContext *avctx) {
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     // 清理编码器
+
+#if vcu_src_use_shm
+    close_shared_memory();
+#endif
     return 0;
 }
 
