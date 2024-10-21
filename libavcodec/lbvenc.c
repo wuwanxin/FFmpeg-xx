@@ -173,7 +173,10 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     //init sevc 
 
 #if enc_streaming      
-    sevc_encode_init(_coded_width,_coded_height);
+    if(sevc_encode_init(_coded_width,_coded_height) != SEVC_ERRORCODE_NONE_ERROR){
+        printf("sevc_encode_init error \n");
+        return -1;
+    }
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
 #endif
