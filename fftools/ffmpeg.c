@@ -2242,7 +2242,6 @@ int main(int argc, char **argv)
     /* parse options and open all input/output files */
     ret = ffmpeg_parse_options(argc, argv);
     if (ret < 0)
-        av_log(NULL, AV_LOG_WARNING, "ffmpeg_parse_options error \n");
         exit_program(1);
 
     if (nb_output_files <= 0 && nb_input_files == 0) {

@@ -27,7 +27,7 @@
 #include "bytestream.h"
 
 //baseenc vcu
-#define hw_vcu
+//#define hw_vcu
 #define vcu_src_use_shm 0
 
 #ifdef hw_vcu
