@@ -461,7 +461,7 @@ static int bsf_list_append_internal(AVBSFList *lst, const char *bsf_name, const 
 
         if (opt)
             shorthand[0] = opt->name;
-
+        
         ret = av_opt_set_from_string(bsf->priv_data, options, shorthand, "=", ":");
         if (ret < 0)
             goto end;

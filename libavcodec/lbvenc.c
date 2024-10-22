@@ -62,9 +62,12 @@ static uint8_t smem_tmp_buffer[SHARE_MEM_SIZE] = {0};
 #define enc_streaming 1
 typedef struct {
     AVClass *class;
-    // 这里可以添加你的编码器需要的其他字段
+    // and other encoder params
     int inited;
     int bypass;
+
+    //encoder options
+    int layers;
 } LowBitrateEncoderContext;
 
 #if vcu_src_use_shm
@@ -161,7 +164,8 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     system("mkdir ./testout");
     
             
-    printf("yuv file loading... \n");
+    printf("yuv file loading...layers:%d \n",ctx->layers);
+
     //init uncompressed data context
     int _width = avctx->width;
     int _height = avctx->height;
@@ -173,7 +177,12 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     //init sevc 
 
 #if enc_streaming      
-    if(sevc_encode_init(_coded_width,_coded_height) != SEVC_ERRORCODE_NONE_ERROR){
+    SEVC_CONFIGURE get_cfg = {
+        .width = _coded_width,
+        .height = _coded_height,
+        .layer_enc = ctx->layers,
+    };
+    if(sevc_encode_init(get_cfg) != SEVC_ERRORCODE_NONE_ERROR){
         printf("sevc_encode_init error \n");
         return -1;
     }
@@ -391,10 +400,19 @@ static av_cold int lbvc_close(AVCodecContext *avctx) {
     return 0;
 }
 
+#define OFFSET(x) offsetof(LowBitrateEncoderContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption lbvc_options[] = {
+    {"layers", "set the number of enc layers", OFFSET(layers), AV_OPT_TYPE_INT, {.i64 = 2}, 0, 2, VE, "layers"},
+    { "1",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0,  VE, "layers" },
+    { "2",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 2 }, 0, 0,  VE, "layers" },
+    {NULL} // end flag
+};
+
 static const AVClass lbvc_class = {
     .class_name = "lbvc",
     .item_name  = av_default_item_name,
-    .option     = NULL,
+    .option     = lbvc_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
