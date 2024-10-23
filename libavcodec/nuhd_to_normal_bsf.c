@@ -211,15 +211,19 @@ second_field:
     out->size = bytestream2_tell_p(&pb);
 
     //debug
+#if 0
     static FILE *fp = NULL;
     if(!fp) fp = fopen("check_bsf.bin","w");
     if(fp) fwrite(out->data,1,out->size,fp);
     fflush(fp);
-
+#endif
 
     ret = av_packet_copy_props(out, in);
-    if (ret < 0)
+    if (ret < 0){
+        printf("filter_lbvc av_packet_copy_props error. \n");
         goto fail;
+    }
+        
 
 fail:
     if (ret < 0)

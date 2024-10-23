@@ -57,9 +57,6 @@ static uint8_t smem_tmp_buffer[SHARE_MEM_SIZE] = {0};
 #endif
 #endif
 
-
-
-#define enc_streaming 1
 typedef struct {
     AVClass *class;
     // and other encoder params
@@ -175,8 +172,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     //open file
 
     //init sevc 
-
-#if enc_streaming      
+   
     SEVC_CONFIGURE get_cfg = {
         .width = _coded_width,
         .height = _coded_height,
@@ -188,7 +184,6 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     }
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
-#endif
 
 #if vcu_src_use_shm
     mmap_shared_memory();
@@ -237,7 +232,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         printf("av_frame_copy error. \n");
         return ret;
     }
-#if enc_streaming
+
 
     printf("==============>lbvc_encode<============== \n");
     printf("width :%d \n",tmp->width);
@@ -323,64 +318,10 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         usleep(1000);
     }else{
         printf("sevc_encode_one_frame error.(%d) \n",ret);
-        av_frame_free(&tmp);
+        if(tmp) av_frame_free(&tmp);
         return ret;
     }
-#else   
-    FILE* fp_bin = NULL;
-    int frame_size = 1024*1024*1024*5;
-    ret = av_new_packet(pkt , frame_size);
-    if(ret < 0){
-        return ret;
-    }
-    bytestream2_init_writer(&pb, pkt->data, pkt->size);
-    fp_bin = fopen("./str.bin", "rb");
-    fseek(fp_bin, 0, SEEK_END);
-    file_size = ftell(fp_bin);
-    rewind(fp_bin);
-    bytestream2_put_be32(&pb, file_size);
-    bytestream2_put_byte(&pb, 0x00);
-    unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
-    fread(base_tmp_buf, 1, file_size , fp_bin);
-    fclose(fp_bin);
-    bytestream2_put_buffer(&pb,base_tmp_buf,file_size);
-    free(base_tmp_buf);
 
-    fp_bin = fopen("./dump_buffer_0.bin", "rb");
-    fseek(fp_bin, 0, SEEK_END);
-    file_size = 50000;//ftell(fp_bin);
-    rewind(fp_bin);
-    bytestream2_put_be32(&pb, file_size);
-    bytestream2_put_byte(&pb, 0x10);
-    unsigned char *enlay1_tmp_buf = (unsigned char *)malloc(file_size);
-    fread(enlay1_tmp_buf, 1, file_size , fp_bin);
-    fclose(fp_bin);
-    bytestream2_put_buffer(&pb,enlay1_tmp_buf,file_size);
-    free(enlay1_tmp_buf);
-
-    bytestream2_put_be32(&pb, 15);
-    bytestream2_put_byte(&pb, 0x11);
-    bytestream2_put_byte(&pb, 0x00);
-    bytestream2_put_byte(&pb, 0x01);
-    bytestream2_put_byte(&pb, 0x02);
-    bytestream2_put_byte(&pb, 0x03);
-    bytestream2_put_byte(&pb, 0x04);
-    bytestream2_put_byte(&pb, 0x05);
-    bytestream2_put_byte(&pb, 0x06);
-    bytestream2_put_byte(&pb, 0x07);
-    bytestream2_put_byte(&pb, 0x08);
-    bytestream2_put_byte(&pb, 0x09);
-    bytestream2_put_byte(&pb, 0x0a);
-    bytestream2_put_byte(&pb, 0x0b);
-    bytestream2_put_byte(&pb, 0x0c);
-    bytestream2_put_byte(&pb, 0x0d);
-    bytestream2_put_byte(&pb, 0x0e);
-    bytestream2_put_byte(&pb, 0x0f);
-    usleep(50*1000);
-    pkt->size = bytestream2_tell_p(&pb);;
-    *got_packet = 1;
-    
-#endif
     if(tmp) av_frame_free(&tmp);
     return 0;
 }
