@@ -186,9 +186,10 @@ second_field:
     }else if(type == 0x11){
         //enhance layer2
 
-#if 0
+#if 1
         bytestream2_put_byte(&pb, 0x01);
         bytestream2_put_be32(&pb, size);
+        modify_bytestream(gb,0,size);
         bytestream2_copy_buffer(&pb, &gb, size);
 #else
         bytestream2_skip(&gb, size);
