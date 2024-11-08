@@ -114,17 +114,17 @@ static void write_to_shared_memory(uint8_t *ori,int size) {
 
 #endif
 
-static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len){
+static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int framenum){
     printf("enter __base_encode_callback_function %dx%d  \n",w,h);
     if(yuv && recon){
 #if vcu_src_use_shm
-        write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2);
+        write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2 * framenum);
         FILE* fp_src = fopen("./src-shm.yuv", "wb");
         fwrite(ptr, 1, w * h * 3 / 2 , fp_src);           
         fclose(fp_src);
 #else
         FILE* fp_src = fopen("./src.yuv", "wb");
-        fwrite(yuv, 1, w * h * 3 / 2 , fp_src);           
+        fwrite(yuv, 1, w * h * 3 / 2 * framenum, fp_src);           
         fclose(fp_src);
 #endif
         char command[200];
