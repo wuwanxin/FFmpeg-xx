@@ -2985,6 +2985,9 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
     s->nal_unit_type = nal->type;
     s->temporal_id   = nal->temporal_id;
 
+    av_log(s->avctx, AV_LOG_DEBUG,
+                       "decode_nal_unit!!!\n");
+    
     switch (s->nal_unit_type) {
     case HEVC_NAL_VPS:
         if (s->avctx->hwaccel && s->avctx->hwaccel->decode_params) {
@@ -3039,6 +3042,11 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
         ret = ff_hevc_decode_nal_sei(gb, s->avctx, &s->sei, &s->ps, s->nal_unit_type);
         if (ret < 0)
             goto fail;
+
+        //nuhd add
+        if(s->sei.lbvenc_enhance_data.present){
+            
+        }
         break;
     case HEVC_NAL_TRAIL_R:
     case HEVC_NAL_TRAIL_N:

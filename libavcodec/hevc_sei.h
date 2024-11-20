@@ -41,6 +41,16 @@ typedef struct HEVCSEIPictureHash {
     uint8_t is_md5;
 } HEVCSEIPictureHash;
 
+//nuhd_add
+typedef struct HEVCSEILbvencEnhanceData {
+    int present;
+    uint8_t *layer1_data;
+    uint32_t layer1_size;
+    uint8_t *layer2_data;
+    uint32_t layer2_size;
+
+} HEVCSEILbvencEnhanceData;
+
 typedef struct HEVCSEIFramePacking {
     int present;
     int arrangement_type;
@@ -100,6 +110,9 @@ typedef struct HEVCSEI {
     HEVCSEIContentLight content_light;
     int active_seq_parameter_set_id;
     HEVCSEITimeCode timecode;
+
+    //nuhd add 
+    HEVCSEILbvencEnhanceData lbvenc_enhance_data;
 } HEVCSEI;
 
 struct HEVCParamSets;

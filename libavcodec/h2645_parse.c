@@ -297,11 +297,14 @@ static int hevc_parse_nal_header(H2645NAL *nal, void *logctx)
 {
     GetBitContext *gb = &nal->gb;
 
+    
+    av_log(logctx, AV_LOG_DEBUG,"nal_unit_type 8 bits: 0x%02x\n",show_bits(gb,8));
     if (get_bits1(gb) != 0)
         return AVERROR_INVALIDDATA;
-
+    
+    
     nal->type = get_bits(gb, 6);
-
+    av_log(logctx, AV_LOG_DEBUG,"nal_unit_type  %d\n",nal->type);
     nal->nuh_layer_id = get_bits(gb, 6);
     nal->temporal_id = get_bits(gb, 3) - 1;
     if (nal->temporal_id < 0)

@@ -135,6 +135,8 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
 
     uint8_t *pos ;
     uint32_t size ;
+    uint32_t total_size = 0;
+    uint32_t write_total_size = 0;
     uint8_t type ;
     int end = 0;
     int field_s = 0;
@@ -149,61 +151,59 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
         goto fail;
 
     //AVPacketSideData *side_data = av_packet_new_side_data(out,AV_PKT_DATA_SEI,in->size);
-
+    
     bytestream2_init(&gb, in->data, in->size);
     bytestream2_init_writer(&pb, out->data, out->size);
 
+    
 second_field:
     pos = in->data + end;
     size = AV_RB32(pos);
     type = AV_RB8(pos + 4);
     bytestream2_skip(&gb, 4);
     bytestream2_skip(&gb, 1);
-    //printf("111type:0x%02x (0x%08x)\n",type,bytestream2_tell_p(&gb));
+    printf("111type:0x%02x (0x%08x) size=%d\n",type,bytestream2_tell_p(&gb),size);
+ 
     if(type == 0x0){
         //base layer
         bytestream2_copy_buffer(&pb, &gb, size);
-    }else if(type == 0x10){
-#if 1        
+    }else if(type == 0x01){
+        //enhance size
+        write_total_size = (size+5);//+5 bytes: 4 bytes size , 1 byte type
+        //write sei header
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x01);
-        bytestream2_put_byte(&pb, 0x27);
+        bytestream2_put_byte(&pb, 0x50);
+        bytestream2_put_byte(&pb, 0x01);
+        bytestream2_put_byte(&pb, 0xCD);
+        //write size for hevc sei 
+        while(write_total_size >= 0xFF){
+            bytestream2_put_byte(&pb,0xFF);
+            write_total_size -= 0xFF;
+            //printf("write 0xFF(%d) \n",write_total_size);
+        }
+        bytestream2_put_byte(&pb,write_total_size);
+        //printf("write 0x%02x(%d) \n",write_total_size,write_total_size);
+    }else if(type == 0x10){   
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_be32(&pb, size);
         modify_bytestream(gb,0,size);
         bytestream2_copy_buffer(&pb, &gb, size);
-#else
-        bytestream2_skip(&gb, size);
-#endif
-        //uint8_t *tmp = (uint8_t *)malloc(size);
-        //if(tmp) bytestream2_get_buffer(&gb,tmp,size);
-        //modify_buffer(tmp,size);
-        //bytestream2_put_buffer(&pb, tmp, size);
-        //free(tmp);
-        //enhance layer1
     }else if(type == 0x11){
         //enhance layer2
-
-#if 1
         bytestream2_put_byte(&pb, 0x01);
         bytestream2_put_be32(&pb, size);
         modify_bytestream(gb,0,size);
         bytestream2_copy_buffer(&pb, &gb, size);
-#else
-        bytestream2_skip(&gb, size);
-#endif
-        //uint8_t *tmp2 = (uint8_t *)malloc(size);
-        //if(tmp2) bytestream2_get_buffer(&gb,tmp2,size);
-        //modify_buffer(tmp2,size);
-        //bytestream2_put_buffer(&pb, tmp2, size);
-        //free(tmp2);
     }else{
         printf("error happened.\n");
     } 
+    
+    
     end = bytestream2_tell_p(&gb);
-    //printf("end:0x%08x (0x%08x) \n",end,in->size);
+    printf("end:0x%08x (0x%08x) \n",end,in->size);
     if( (in->size - end) > 0 ){
         goto second_field;
     }
@@ -212,7 +212,7 @@ second_field:
     out->size = bytestream2_tell_p(&pb);
 
     //debug
-#if 0
+#if 1
     static FILE *fp = NULL;
     if(!fp) fp = fopen("check_bsf.bin","w");
     if(fp) fwrite(out->data,1,out->size,fp);

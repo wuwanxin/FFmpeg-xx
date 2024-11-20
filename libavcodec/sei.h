@@ -135,6 +135,8 @@ enum SEIType {
     SEI_TYPE_ANNOTATED_REGIONS                           = 202,
     SEI_TYPE_SUBPIC_LEVEL_INFO                           = 203,
     SEI_TYPE_SAMPLE_ASPECT_RATIO_INFO                    = 204,
+    //nuhd add
+    SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA                    = 205,
 };
 
 /**

@@ -297,6 +297,11 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_buffer(&pb,out.base_buf,out.base_size);
 
+        //enhance size
+        printf("sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
+        bytestream2_put_be32(&pb, out.enlayer1_size+out.enlayer2_size);
+        bytestream2_put_byte(&pb, 0x01);
+
         //en1
         bytestream2_put_be32(&pb, out.enlayer1_size);
         bytestream2_put_byte(&pb, 0x10);
