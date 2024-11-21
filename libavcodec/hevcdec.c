@@ -3427,7 +3427,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             AV_WB32(nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x);
             AV_WB32(nuhd_extradata_buffer + 4,s->sei.lbvenc_enhance_data.layer1_roi_y);
             AV_WB32(nuhd_extradata_buffer + 8,s->sei.lbvenc_enhance_data.layer1_size);
-            printf("[nuhd] roi pos(%d,%d) data_size(%d) \n",s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
+            printf("[nuhd]0x%08x roi pos(%d,%d) data_size(%d) \n",nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
             memcpy(nuhd_extradata_buffer + 12, s->sei.lbvenc_enhance_data.layer1_data, s->sei.lbvenc_enhance_data.layer1_size);
             s->output_frame->opaque = nuhd_extradata_buffer;
             //av_dict_set(&metadata, "lb_enhance_data_enable", (const char *)nuhd_extradata_buffer->data, 0);

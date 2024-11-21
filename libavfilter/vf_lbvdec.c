@@ -158,8 +158,8 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
         get_roi_x = AV_RB32(lbvdec_enhance_data);
         get_roi_y = AV_RB32(lbvdec_enhance_data + 4);
         lbvdec_enhance_data_size = AV_RB32(lbvdec_enhance_data + 8);
-        //printf("[nuhd] vf get: roi(%d,%d) , size=%d \n",get_roi_x,get_roi_y,lbvdec_enhance_data_size);
-#if 1//debug
+        printf("[nuhd]0x%08x vf get: roi(%d,%d) , size=%d \n",lbvdec_enhance_data,get_roi_x,get_roi_y,lbvdec_enhance_data_size);
+#if 0//debug
         static int lbvdec_enhance_data_counnter = 0;
         char enhance_data_layer1_name[256];
         snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter++);
@@ -473,9 +473,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
     td.in = frame;
     td.out = out;
     int res;
-    if(res = avctx->internal->execute(avctx, do_conversion, &td, NULL, FFMIN(outlink->h, avctx->graph->nb_threads))) {
-        return res;
-    }
+    // if(res = avctx->internal->execute(avctx, do_conversion, &td, NULL, FFMIN(outlink->h, avctx->graph->nb_threads))) {
+    //     return res;
+    // }
+    frame_copy_video(out, frame);
 
     av_frame_free(&frame);
 

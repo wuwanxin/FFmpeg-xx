@@ -399,7 +399,7 @@ int ff_hevc_decode_nal_sei(GetBitContext *gb, void *logctx, HEVCSEI *s,
     GetByteContext gbyte;
     int ret;
     printf("ff_hevc_decode_nal_sei sei size:%d\n",get_bits_left(gb) / 8);
-#if 1
+#if 0
     FILE *fp = fopen("testout/debug_ff_hevc_decode_nal_sei.bin","wb");
     fwrite(gb->buffer,1,get_bits_left(gb) / 8,fp);
     fclose(fp);

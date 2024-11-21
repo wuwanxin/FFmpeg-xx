@@ -169,7 +169,7 @@ second_field:
         bytestream2_copy_buffer(&pb, &gb, size);
     }else if(type == 0x01){
         //enhance size
-        write_total_size = (size+5);//+5 bytes: 4 bytes size , 1 byte type
+        write_total_size = (size+5+4+4);//+13 bytes: 4 bytes size , 1 byte type ,4 bytes roi pos x,,4 bytes roi pos y
         //write sei header
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x00);
@@ -178,7 +178,8 @@ second_field:
         bytestream2_put_byte(&pb, 0x50);
         bytestream2_put_byte(&pb, 0x01);
         bytestream2_put_byte(&pb, 0xCD);
-        //write size for hevc sei 
+        //write size for hevc sei
+        printf("write 0x%02x(%d) \n",write_total_size,write_total_size); 
         while(write_total_size >= 0xFF){
             bytestream2_put_byte(&pb,0xFF);
             write_total_size -= 0xFF;
