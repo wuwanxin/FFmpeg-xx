@@ -46,8 +46,12 @@ typedef struct HEVCSEILbvencEnhanceData {
     int present;
     uint8_t *layer1_data;
     uint32_t layer1_size;
+    int layer1_roi_x;
+    int layer1_roi_y;
     uint8_t *layer2_data;
     uint32_t layer2_size;
+    int layer2_roi_x;
+    int layer3_roi_y;
 
 } HEVCSEILbvencEnhanceData;
 

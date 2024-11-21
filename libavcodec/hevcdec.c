@@ -3370,6 +3370,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     size_t sd_size;
     HEVCContext *s = avctx->priv_data;
 
+    //nuhd add
+    uint8_t *nuhd_extradata_buffer;
+    AVDictionary *nuhd_metadata = NULL;
+
     if (!avpkt->size) {
         ret = ff_hevc_output_frame(s, rframe, 1);
         if (ret < 0)
@@ -3416,6 +3420,18 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         //nuhd add
         if(s->is_decoded && s->sei.lbvenc_enhance_data.present){
             //s->ref->frame    ;
+            nuhd_extradata_buffer = (uint8_t *)av_malloc(s->sei.lbvenc_enhance_data.layer1_size + 256);
+            if (!nuhd_extradata_buffer) {
+                return AVERROR(ENOMEM); // mem alloc err
+            }
+            AV_WB32(nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x);
+            AV_WB32(nuhd_extradata_buffer + 4,s->sei.lbvenc_enhance_data.layer1_roi_y);
+            AV_WB32(nuhd_extradata_buffer + 8,s->sei.lbvenc_enhance_data.layer1_size);
+            //printf("[nuhd] roi pos(%d,%d) data_size(%d) \n",s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
+            memcpy(nuhd_extradata_buffer + 12, s->sei.lbvenc_enhance_data.layer1_data, s->sei.lbvenc_enhance_data.layer1_size);
+            s->output_frame->opaque = nuhd_extradata_buffer;
+            //av_dict_set(&metadata, "lb_enhance_data_enable", (const char *)nuhd_extradata_buffer->data, 0);
+            
         }
     }
     s->sei.picture_hash.is_md5 = 0;

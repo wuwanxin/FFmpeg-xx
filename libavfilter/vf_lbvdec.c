@@ -24,7 +24,7 @@
  */
 
 #include <stdio.h>
-
+#include "libavcodec/get_bits.h"
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
@@ -121,6 +121,10 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
 {
     int i, planes;
     SEVC_DEC_PARAM_S dec_param;
+    int get_roi_x = -1;
+    int get_roi_y = -1;
+    int lbvdec_enhance_data_size = 0;
+    uint8_t *lbvdec_enhance_data = NULL;
     //printf("frame_copy_video enter src(%dx%d) dst(%dx%d)\n",src->width,src->height,dst->width,dst->height);
 
     planes = av_pix_fmt_count_planes(dst->format);
@@ -147,7 +151,29 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
     dec_param.data_out_chroma_v = dst->data[2];
 
     sevc_layer1_int_dec_one_frame_with_param(dec_param);
-    sevc_layer1_do_dec_one_frame(NULL);
+
+    
+    if(src->opaque){
+        lbvdec_enhance_data = (uint8_t *)src->opaque;
+        get_roi_x = AV_RB32(lbvdec_enhance_data);
+        get_roi_y = AV_RB32(lbvdec_enhance_data + 4);
+        lbvdec_enhance_data_size = AV_RB32(lbvdec_enhance_data + 8);
+#if 1//debug
+        static int lbvdec_enhance_data_counnter = 0;
+        char enhance_data_layer1_name[256];
+        snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter++);
+        FILE *enhance_data_layer1 = fopen(enhance_data_layer1_name,"wb");
+        if(enhance_data_layer1){
+            fwrite(lbvdec_enhance_data + 12, 1, lbvdec_enhance_data_size , enhance_data_layer1);
+            fclose(enhance_data_layer1);
+        }
+#endif
+        sevc_layer1_do_dec_one_frame(lbvdec_enhance_data + 12,lbvdec_enhance_data_size);
+    }else{
+        sevc_layer1_do_dec_one_frame(NULL,0);
+    }
+
+    
     
     // for (i = 0; i < planes_nb; i++) {
     //     int h = dst->height;
