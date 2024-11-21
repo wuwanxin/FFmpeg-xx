@@ -356,20 +356,20 @@ static int decode_nal_sei_message(GetByteContext *gb, void *logctx, HEVCSEI *s,
         if (bytestream2_get_bytes_left(gb) < 2 || payload_type > INT_MAX - 255)
             return AVERROR_INVALIDDATA;
         byte          = bytestream2_get_byteu(gb);
-        av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
+        //av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
         payload_type += byte;
-        av_log(logctx, AV_LOG_DEBUG, ">>payload_type:%d\n",payload_type);
+        //av_log(logctx, AV_LOG_DEBUG, ">>payload_type:%d\n",payload_type);
     }
     av_log(logctx, AV_LOG_DEBUG, "payload_type:%d\n",payload_type);
     byte = 0xFF;
     while (byte == 0xFF) {
-        av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
+        //av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
         if (bytestream2_get_bytes_left(gb) < 1 + payload_size)
             return AVERROR_INVALIDDATA;
         byte          = bytestream2_get_byteu(gb);
-        av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
+        //av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
         payload_size += byte;
-        av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
+        //av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
     }
     av_log(logctx, AV_LOG_DEBUG, "payload_size:%d\n",payload_size);
     if (bytestream2_get_bytes_left(gb) < payload_size)

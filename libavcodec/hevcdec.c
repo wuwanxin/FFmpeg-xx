@@ -3043,10 +3043,6 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
         if (ret < 0)
             goto fail;
 
-        //nuhd add
-        if(s->sei.lbvenc_enhance_data.present){
-            
-        }
         break;
     case HEVC_NAL_TRAIL_R:
     case HEVC_NAL_TRAIL_N:
@@ -3415,6 +3411,11 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
                 ff_hevc_unref_frame(s, s->ref, ~0);
                 return ret;
             }
+        }
+
+        //nuhd add
+        if(s->is_decoded && s->sei.lbvenc_enhance_data.present){
+            //s->ref->frame    ;
         }
     }
     s->sei.picture_hash.is_md5 = 0;

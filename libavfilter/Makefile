@@ -620,6 +620,9 @@ OBJS-$(CONFIG_AVSYNCTEST_FILTER)             += src_avsynctest.o
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
+# nuhd lbvdec filter
+OBJS-$(CONFIG_LBVDEC_FILTER)                  += vf_lbvdec.o
+
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                                    += log2_tab.o
 
