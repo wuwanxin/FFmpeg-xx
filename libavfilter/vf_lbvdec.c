@@ -158,7 +158,7 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
         get_roi_x = AV_RB32(lbvdec_enhance_data);
         get_roi_y = AV_RB32(lbvdec_enhance_data + 4);
         lbvdec_enhance_data_size = AV_RB32(lbvdec_enhance_data + 8);
-#if 1//debug
+#if 0//debug
         static int lbvdec_enhance_data_counnter = 0;
         char enhance_data_layer1_name[256];
         snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter++);
