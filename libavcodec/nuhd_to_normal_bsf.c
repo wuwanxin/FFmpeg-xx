@@ -189,6 +189,8 @@ second_field:
     }else if(type == 0x10){   
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_be32(&pb, size);
+        bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi x
+        bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi y
         modify_bytestream(gb,0,size);
         bytestream2_copy_buffer(&pb, &gb, size);
     }else if(type == 0x11){

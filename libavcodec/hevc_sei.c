@@ -106,12 +106,16 @@ static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(HEVCSEILbvencEnhanceD
     uint8_t lbvenc_enhance_type;
     uint32_t size;
     uint8_t *buffer = NULL;
+    int roi_x;
+    int roi_y;
     
     lbvenc_enhance_type = bytestream2_get_byte(gb);
 
     if (lbvenc_enhance_type == 0x00) {
         size = bytestream2_get_be32(gb);
-        printf("lbvenc_enhance_data layer1 data...size=%d\n",size);
+        roi_x = bytestream2_get_be32(gb);
+        roi_y = bytestream2_get_be32(gb);
+        printf("lbvenc_enhance_data layer1 data...size=%d roi(%d,%d)\n",size,roi_x,roi_y);
         modify_normal_bytestream_to_nuhd(*gb,0,size);
         buffer = (uint8_t *)malloc(sizeof(uint8_t) * size);
         bytestream2_get_buffer(gb, buffer, size);
@@ -127,6 +131,8 @@ static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(HEVCSEILbvencEnhanceD
 #endif
         s->layer1_data = buffer;
         s->layer1_size = size;
+        s->layer1_roi_x = roi_x;
+        s->layer1_roi_y = roi_y;
 
     } else if (lbvenc_enhance_type == 0x01) {
         printf("lbvenc_enhance_data layer2 data...\n");

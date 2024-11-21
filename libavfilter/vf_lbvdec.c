@@ -158,7 +158,8 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
         get_roi_x = AV_RB32(lbvdec_enhance_data);
         get_roi_y = AV_RB32(lbvdec_enhance_data + 4);
         lbvdec_enhance_data_size = AV_RB32(lbvdec_enhance_data + 8);
-#if 0//debug
+        //printf("[nuhd] vf get: roi(%d,%d) , size=%d \n",get_roi_x,get_roi_y,lbvdec_enhance_data_size);
+#if 1//debug
         static int lbvdec_enhance_data_counnter = 0;
         char enhance_data_layer1_name[256];
         snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter++);
@@ -168,9 +169,9 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
             fclose(enhance_data_layer1);
         }
 #endif
-        sevc_layer1_do_dec_one_frame(lbvdec_enhance_data + 12,lbvdec_enhance_data_size);
+        sevc_layer1_do_dec_one_frame(lbvdec_enhance_data + 12,lbvdec_enhance_data_size,get_roi_x,get_roi_y);
     }else{
-        sevc_layer1_do_dec_one_frame(NULL,0);
+        sevc_layer1_do_dec_one_frame(NULL,0,0,0);
     }
 
     

@@ -301,13 +301,14 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         printf("sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
         bytestream2_put_be32(&pb, out.enlayer1_size+out.enlayer2_size);
         bytestream2_put_byte(&pb, 0x01);
-        printf("sevc_encode_new_output_frame: layer1 position-%dx%d \n",out.enlayer1_size,out.enlayer2_size); //enhance position
-        //bytestream2_put_byte(&pb, out.enlayer1_roi_x);
-        //bytestream2_put_byte(&pb, out.enlayer1_roi_y);
+        
         
         //en1
         bytestream2_put_be32(&pb, out.enlayer1_size);
         bytestream2_put_byte(&pb, 0x10);
+        printf("sevc_encode_new_output_frame: layer1 position-%dx%d \n",out.enlayer1_roi_x,out.enlayer1_roi_y); //enhance position
+        bytestream2_put_be32(&pb, out.enlayer1_roi_x);
+        bytestream2_put_be32(&pb, out.enlayer1_roi_y);
         bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer1_size);
 
         //en2
