@@ -115,7 +115,6 @@ static void write_to_shared_memory(uint8_t *ori,int size) {
 #endif
 
 static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int framenum){
-    printf("enter __base_encode_callback_function %dx%d  \n",w,h);
     if(yuv && recon){
 #if vcu_src_use_shm
         write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2 * framenum);
@@ -152,7 +151,7 @@ static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *r
 
 static av_cold int lbvc_init(AVCodecContext *avctx) {
 
-    printf("lbvc_init enter! \n");
+    av_log(avctx, AV_LOG_DEBUG,"lbvc_init enter! \n");
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     // 初始化编码器
 
@@ -161,7 +160,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     system("mkdir ./testout");
     
             
-    printf("yuv file loading...layers:%d \n",ctx->layers);
+    av_log(avctx, AV_LOG_DEBUG,"yuv file loading...layers:%d \n",ctx->layers);
 
     //init uncompressed data context
     int _width = avctx->width;
@@ -179,7 +178,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
         .layer_enc = ctx->layers,
     };
     if(sevc_encode_init(get_cfg) != SEVC_ERRORCODE_NONE_ERROR){
-        printf("sevc_encode_init error \n");
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init error \n");
         return -1;
     }
 
@@ -195,7 +194,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 
     AL_ELibEncoderArch eArch = AL_LIB_ENCODER_ARCH_HOST;
     if(AL_Lib_Encoder_Init(eArch) != AL_SUCCESS){
-        printf("error AL_Lib_Encoder_Init\n");
+        av_log(avctx, AV_LOG_DEBUG,"error AL_Lib_Encoder_Init\n");
         return -1;
     }
 #endif
@@ -216,36 +215,36 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
     }
 
     int file_size = 0;
-    //printf("new frame lbvc_encode \n");
+    //av_log(avctx, AV_LOG_DEBUG,"new frame lbvc_encode \n");
     tmp = av_frame_alloc();
     if(!tmp){
-        printf("av_frame_alloc error. \n");
+        av_log(avctx, AV_LOG_DEBUG,"av_frame_alloc error. \n");
         return ret;
     }
     ret = av_frame_ref(tmp,frame);
     if (ret < 0) {
-        printf("av_frame_ref error. \n");
+        av_log(avctx, AV_LOG_DEBUG,"av_frame_ref error. \n");
         return ret;
     }
     ret = av_frame_copy(tmp,frame);
     if (ret < 0) {
-        printf("av_frame_copy error. \n");
+        av_log(avctx, AV_LOG_DEBUG,"av_frame_copy error. \n");
         return ret;
     }
 
 
-    printf("==============>lbvc_encode<============== \n");
-    printf("width :%d \n",tmp->width);
-    printf("height:%d \n",tmp->height);
+    av_log(avctx, AV_LOG_DEBUG,"==============>lbvc_encode<============== \n");
+    av_log(avctx, AV_LOG_DEBUG,"width :%d \n",tmp->width);
+    av_log(avctx, AV_LOG_DEBUG,"height:%d \n",tmp->height);
     for(int i = 0;i<AV_NUM_DATA_POINTERS;i++){
         if(tmp->data[i]){
             if(i==0)
-                printf("stride(linsize)-LUMA          :%d \n",tmp->linesize[i]);
+                av_log(avctx, AV_LOG_DEBUG,"stride(linsize)-LUMA          :%d \n",tmp->linesize[i]);
             else
-                printf("stride(linsize)-CHROMA(U/V/UV):%d \n",tmp->linesize[i]);
+                av_log(avctx, AV_LOG_DEBUG,"stride(linsize)-CHROMA(U/V/UV):%d \n",tmp->linesize[i]);
         }
     }
-    printf("========================================= \n");
+    av_log(avctx, AV_LOG_DEBUG,"========================================= \n");
 
     static FILE *fp;
     switch(frame->format){
@@ -263,9 +262,9 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
             break;
     }
 
-    printf("sevc_encode_one_frame start\n");
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame start\n");
     ret = sevc_encode_one_frame();
-    printf("sevc_encode_one_frame down\n");
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame down\n");
 
     if(ret == SEVC_ERRORCODE_NONE_ERROR){
         
@@ -287,9 +286,10 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
     
         ret = av_new_packet(pkt , out.base_size + out.enlayer1_size + out.enlayer2_size  + 1024*100);
         if(ret < 0){
-            printf("av_new_packet error\n");
+            av_log(avctx, AV_LOG_DEBUG,"av_new_packet error\n");
             return ret;
         }
+        av_log(avctx, AV_LOG_DEBUG,"lbvenc packet size:%d \n",pkt->size);
         bytestream2_init_writer(&pb, pkt->data, pkt->size);
         
         //base
@@ -298,7 +298,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         bytestream2_put_buffer(&pb,out.base_buf,out.base_size);
 
         //enhance size and header
-        printf("sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
         bytestream2_put_be32(&pb, out.enlayer1_size+out.enlayer2_size);
         bytestream2_put_byte(&pb, 0x01);
         
@@ -306,7 +306,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         //en1
         bytestream2_put_be32(&pb, out.enlayer1_size);
         bytestream2_put_byte(&pb, 0x10);
-        printf("sevc_encode_new_output_frame: layer1 position-%dx%d \n",out.enlayer1_roi_x,out.enlayer1_roi_y); //enhance position
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 position-%dx%d \n",out.enlayer1_roi_x,out.enlayer1_roi_y); //enhance position
         bytestream2_put_be32(&pb, out.enlayer1_roi_x);
         bytestream2_put_be32(&pb, out.enlayer1_roi_y);
         bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer1_size);
@@ -318,15 +318,15 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         sevc_encode_free_output_frame(&out);
         pkt->size = bytestream2_tell_p(&pb);
         //av_image_copy(pkt->data,pkt->size);
-        printf("sevc_encode_get_frame size:%d\n",pkt->size);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_get_frame size:%d\n",pkt->size);
         *got_packet = 1;
         //sleep(1000);
     }else if(ret == SEVC_ERRORCODE_RECON_WAIT){
-        printf("sevc_encode_one_frame wait.... \n");
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame wait.... \n");
         *got_packet = 0;
         usleep(1000);
     }else{
-        printf("sevc_encode_one_frame error.(%d) \n",ret);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame error.(%d) \n",ret);
         if(tmp) av_frame_free(&tmp);
         return ret;
     }
@@ -337,7 +337,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
 
 static void lbvc_flush(AVCodecContext *avctx)
 {
-    printf("lbvc_flush enter! \n");
+    av_log(avctx, AV_LOG_DEBUG,"lbvc_flush enter! \n");
 }
 
 static av_cold int lbvc_close(AVCodecContext *avctx) {

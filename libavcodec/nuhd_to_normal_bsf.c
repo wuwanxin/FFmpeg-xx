@@ -150,6 +150,7 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     if (ret < 0)
         goto fail;
 
+    
     //AVPacketSideData *side_data = av_packet_new_side_data(out,AV_PKT_DATA_SEI,in->size);
     
     bytestream2_init(&gb, in->data, in->size);
@@ -162,7 +163,7 @@ second_field:
     type = AV_RB8(pos + 4);
     bytestream2_skip(&gb, 4);
     bytestream2_skip(&gb, 1);
-    printf("111type:0x%02x (0x%08x) size=%d\n",type,bytestream2_tell_p(&gb),size);
+    av_log(ctx, AV_LOG_DEBUG,"111type:0x%02x (0x%08x) size=%d\n",type,bytestream2_tell_p(&gb),size);
  
     if(type == 0x0){
         //base layer
@@ -179,16 +180,16 @@ second_field:
         bytestream2_put_byte(&pb, 0x01);
         bytestream2_put_byte(&pb, 0xCD);
         //write size for hevc sei
-        printf("write 0x%02x(%d) \n",write_total_size,write_total_size); 
+        av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size); 
         while(write_total_size >= 0xFF){
             bytestream2_put_byte(&pb,0xFF);
             write_total_size -= 0xFF;
-            //printf("write 0xFF(%d) \n",write_total_size);
+            //av_log(ctx, AV_LOG_DEBUG,"write 0xFF(%d) \n",write_total_size);
         }
         bytestream2_put_byte(&pb,write_total_size);
-        //printf("write 0x%02x(%d) \n",write_total_size,write_total_size);
+        av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size);
     }else if(type == 0x10){   
-        bytestream2_put_byte(&pb, 0x00);
+        bytestream2_put_byte(&pb, 0xE0);
         bytestream2_put_be32(&pb, size);
         bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi x
         bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi y
@@ -196,23 +197,27 @@ second_field:
         bytestream2_copy_buffer(&pb, &gb, size);
     }else if(type == 0x11){
         //enhance layer2
-        bytestream2_put_byte(&pb, 0x01);
+        bytestream2_put_byte(&pb, 0xE1);
         bytestream2_put_be32(&pb, size);
-        modify_bytestream(gb,0,size);
-        bytestream2_copy_buffer(&pb, &gb, size);
+        if(size > 0){
+            modify_bytestream(gb,0,size);
+            bytestream2_copy_buffer(&pb, &gb, size);
+        }
+        
     }else{
-        printf("error happened.\n");
+        av_log(ctx, AV_LOG_ERROR,"error happened.\n");
     } 
     
     
     end = bytestream2_tell_p(&gb);
-    printf("end:0x%08x (0x%08x) \n",end,in->size);
+    av_log(ctx, AV_LOG_DEBUG,"end:0x%08x (0x%08x) \n",end,in->size);
     if( (in->size - end) > 0 ){
         goto second_field;
     }
     
 
     out->size = bytestream2_tell_p(&pb);
+    av_log(ctx, AV_LOG_DEBUG,"nuhd_to_normal int:%d , out packet size:%d \n",in->size,out->size);
 
     //debug
 #if 1
@@ -224,10 +229,10 @@ second_field:
 
     ret = av_packet_copy_props(out, in);
     if (ret < 0){
-        printf("filter_lbvc av_packet_copy_props error. \n");
+        av_log(ctx, AV_LOG_ERROR,"filter_lbvc av_packet_copy_props error. \n");
         goto fail;
     }
-        
+    av_log(ctx, AV_LOG_DEBUG,"222 nuhd_to_normal int:%d , out packet size:%d \n",in->size,out->size);    
 
 fail:
     if (ret < 0)
@@ -316,10 +321,10 @@ second_field:
     bytestream2_put_byte(&pb, 0x06);
     bytestream2_copy_buffer(&pb, &gb, in->size);
     //fake 265
-    //printf("outsize:0x%x %d\n",bytestream2_tell_p(&pb),bytestream2_tell_p(&pb));
+    //av_log(ctx, AV_LOG_DEBUG,"outsize:0x%x %d\n",bytestream2_tell_p(&pb),bytestream2_tell_p(&pb));
     bytestream2_put_buffer(&pb,fake_hevc_frame,sizeof(fake_hevc_frame));
-    //printf("fake_hevc_frame size:0x%x %d\n",sizeof(fake_hevc_frame),sizeof(fake_hevc_frame));
-    //printf("outsize:0x%x %d\n",bytestream2_tell_p(&pb),bytestream2_tell_p(&pb));
+    //av_log(ctx, AV_LOG_DEBUG,"fake_hevc_frame size:0x%x %d\n",sizeof(fake_hevc_frame),sizeof(fake_hevc_frame));
+    //av_log(ctx, AV_LOG_DEBUG,"outsize:0x%x %d\n",bytestream2_tell_p(&pb),bytestream2_tell_p(&pb));
     
     out->size = bytestream2_tell_p(&pb);
     

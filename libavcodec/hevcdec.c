@@ -3187,6 +3187,9 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
     s->eos = 0;
     s->overlap = 0;
 
+    av_log(s->avctx, AV_LOG_DEBUG,
+               "decode_nal_units , get buf_length:%d \n",length); 
+
     /* split the input packet into NAL units, so we know the upper bound on the
      * number of slices in the frame */
     ret = ff_h2645_packet_split(&s->pkt, buf, length, s->avctx, s->is_nalff,
@@ -3208,6 +3211,8 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         } else {
             eos_at_start = 0;
         }
+        av_log(s->avctx, AV_LOG_DEBUG,
+               "decode_nal_units , nal:%d  size:%d\n",s->pkt.nals[i].type,s->pkt.nals[i].size); 
     }
 
     /*
@@ -3382,7 +3387,15 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         *got_output = ret;
         return 0;
     }
+    av_log(avctx, AV_LOG_DEBUG,
+                   "hevc_decode_frame get packet size:%d\n ",avpkt->size);
 
+#if 0
+    static FILE *check_receive_decode = NULL;
+    if(!check_receive_decode) check_receive_decode = fopen("check_receive_decode.bin","w"); // compare with check_bsf.bin
+    if(check_receive_decode) fwrite(avpkt->data,1,avpkt->size,check_receive_decode);
+    fflush(check_receive_decode);
+#endif
     sd = av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA, &sd_size);
     if (sd && sd_size > 0) {
         ret = hevc_decode_extradata(s, sd, sd_size, 0);
