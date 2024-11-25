@@ -3430,6 +3430,16 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             }
         }
 
+        
+    }
+    s->sei.picture_hash.is_md5 = 0;
+
+    if (s->is_decoded) {
+        av_log(avctx, AV_LOG_DEBUG, "Decoded frame with POC %d.\n", s->poc);
+        s->is_decoded = 0;
+    }
+
+    if (s->output_frame->buf[0]) {
         //nuhd add
         if(s->is_decoded && s->sei.lbvenc_enhance_data.present){
             //s->ref->frame    ;
@@ -3446,15 +3456,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             //av_dict_set(&metadata, "lb_enhance_data_enable", (const char *)nuhd_extradata_buffer->data, 0);
             
         }
-    }
-    s->sei.picture_hash.is_md5 = 0;
-
-    if (s->is_decoded) {
-        av_log(avctx, AV_LOG_DEBUG, "Decoded frame with POC %d.\n", s->poc);
-        s->is_decoded = 0;
-    }
-
-    if (s->output_frame->buf[0]) {
+        av_log(avctx, AV_LOG_DEBUG, "Move frame POC %d.\n", s->poc);
         av_frame_move_ref(rframe, s->output_frame);
         *got_output = 1;
     }

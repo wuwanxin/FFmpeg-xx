@@ -162,12 +162,23 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
 #if 0//debug
         static int lbvdec_enhance_data_counnter = 0;
         char enhance_data_layer1_name[256];
-        snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter++);
+        snprintf(enhance_data_layer1_name, sizeof(enhance_data_layer1_name), "testout/enhance_data_layer1_rx_%d.jpg", lbvdec_enhance_data_counnter);
         FILE *enhance_data_layer1 = fopen(enhance_data_layer1_name,"wb");
         if(enhance_data_layer1){
             fwrite(lbvdec_enhance_data + 12, 1, lbvdec_enhance_data_size , enhance_data_layer1);
             fclose(enhance_data_layer1);
         }
+
+        char base_data_layer1_name[256];
+        snprintf(base_data_layer1_name, sizeof(base_data_layer1_name), "testout/base_data_layer1_rx_%d.yuv", lbvdec_enhance_data_counnter); 
+        FILE *base_data_layer1 = fopen(base_data_layer1_name,"wb");
+        if(base_data_layer1){
+            fwrite(src->data[0], 1, 1920 * 1088 , base_data_layer1);
+            fwrite(src->data[1], 1, 1920 * 1088 / 2 / 2 , base_data_layer1);
+            fwrite(src->data[2], 1, 1920 * 1088 / 2 / 2  , base_data_layer1);
+            fclose(base_data_layer1);
+        }
+        lbvdec_enhance_data_counnter++;
 #endif
         sevc_layer1_do_dec_one_frame(lbvdec_enhance_data + 12,lbvdec_enhance_data_size,get_roi_x,get_roi_y);
     }else{
