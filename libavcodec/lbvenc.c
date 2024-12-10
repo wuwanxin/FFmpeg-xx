@@ -58,6 +58,11 @@ static uint8_t smem_tmp_buffer[SHARE_MEM_SIZE] = {0};
 #endif
 
 typedef struct {
+    AVCodecContext *baseenc_ctx; 
+    AVCodecContext *basedec_ctx; 
+}BaseEncoderContext;
+
+typedef struct {
     AVClass *class;
     // and other encoder params
     int inited;
@@ -65,6 +70,11 @@ typedef struct {
 
     //encoder options
     int layers;
+
+    // baseenc_ctx
+    AVCodecContext *baseenc_ctx; 
+    AVCodecContext *basedec_ctx; 
+    BaseEncoderContext p_base_ctx;
 } LowBitrateEncoderContext;
 
 #if vcu_src_use_shm
@@ -114,8 +124,70 @@ static void write_to_shared_memory(uint8_t *ori,int size) {
 
 #endif
 
-static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int framenum){
+static AVFrame* create_baseenc_yuv420p_frame(uint8_t *buffer, int width, int height) {
+    // Allocate an AVFrame instance
+    AVFrame *frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Could not allocate memory for AVFrame\n");
+        return NULL;
+    }
+
+    // Set parameters for the AVFrame
+    frame->format = AV_PIX_FMT_YUV420P; // YUV 420P format
+    frame->width = width;
+    frame->height = height;
+
+    // Allocate buffer for the image data
+    int ret = av_frame_get_buffer(frame, 1); // 1 is the alignment requirement; can be adjusted as needed
+    if (ret < 0) {
+        fprintf(stderr, "Could not allocate frame data\n");
+        av_frame_free(&frame);
+        return NULL;
+    }
+
+    // Now copy the data from buffer into the AVFrame's data
+    // Assuming the data in buffer is in the order of Y, U, V (YUV 420P format)
+    int y_plane_size = width * height;
+    int uv_plane_size = (width / 2) * (height / 2);
+
+    // Copy Y plane data
+    memcpy(frame->data[0], buffer, y_plane_size);
+
+    // Copy U plane data
+    memcpy(frame->data[1], buffer + y_plane_size, uv_plane_size);
+
+    // Copy V plane data
+    memcpy(frame->data[2], buffer + y_plane_size + uv_plane_size, uv_plane_size);
+
+    // Set timestamp information (optional, depending on use case)
+    frame->pts = 0;  // Set the presentation timestamp (PTS) for the frame
+
+    return frame;
+}
+
+static void install_baseenc_yuv420p_recon(AVFrame *frame,uint8_t *buffer) {
+    int y_plane_size = frame->width * frame->height;
+    int uv_plane_size = (frame->width / 2) * (frame->height / 2);
+
+    // Copy Y plane data
+    memcpy(buffer,frame->data[0], y_plane_size);
+
+    // Copy U plane data
+    memcpy(buffer + y_plane_size,frame->data[1], uv_plane_size);
+
+    // Copy V plane data
+    memcpy(buffer + y_plane_size + uv_plane_size,frame->data[2], uv_plane_size);
+
+}
+
+
+static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int framenum){
     if(yuv && recon){
+        int ret;
+        BaseEncoderContext *p_base_ctx = (BaseEncoderContext *)basectx;
+        AVCodecContext *enc_ctx = p_base_ctx->baseenc_ctx; 
+        AVCodecContext *dec_ctx = p_base_ctx->basedec_ctx; 
+#if 0
 #if vcu_src_use_shm
         write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2 * framenum);
         FILE* fp_src = fopen("./src-shm.yuv", "wb");
@@ -142,7 +214,60 @@ static int __base_encode_callback_function(unsigned char *yuv,  unsigned char *r
         fread(str, 1, file_size , fp_bin);
         fclose(fp_bin);
         *str_len = file_size;
+#else
+        AVFrame *frame = create_baseenc_yuv420p_frame(yuv,w,h);
+        
+        ret = avcodec_send_frame((AVCodecContext*)enc_ctx, frame);
+        if (ret < 0) {
+            return ret;
+        }
 
+        // Create a new AVPacket
+        AVPacket *pkt = av_packet_alloc();
+        if (!pkt) {
+            fprintf(stderr, "Could not allocate AVPacket\n");
+            return -1; // Handle allocation error appropriately
+        }
+
+        ret = avcodec_receive_packet((AVCodecContext*)enc_ctx, pkt);
+        if (ret == 0) {
+
+            // Copy data from pkt to str if pkt has data
+            if (pkt->size > 0) {
+                memcpy(str, pkt->data, pkt->size); // Copy packet data to str
+                *str_len = pkt->size;              // Set str_len to the size of the packet
+            }
+
+            pkt->stream_index = 0; // Set the stream index to video
+
+            ret = avcodec_send_packet((AVCodecContext*)dec_ctx, pkt);
+            if (ret < 0) {
+                fprintf(stderr, "Dec error happened.\n");
+                return -1; 
+            }
+            AVFrame *decoded_frame = av_frame_alloc();
+            ret = avcodec_receive_frame((AVCodecContext*)dec_ctx, decoded_frame);
+            if (ret < 0) {
+                fprintf(stderr, "Dec receive frame error happened.\n");
+                return -1; 
+            }
+
+            install_baseenc_yuv420p_recon(decoded_frame,recon);
+
+            //memcpy(recon, decoded_frame->data[0], decoded_frame->linesize[0] * decoded_frame->height); // Y
+            //memcpy(recon + decoded_frame->linesize[0] * decoded_frame->height, decoded_frame->data[1], decoded_frame->linesize[1]); // U
+            //memcpy(recon + decoded_frame->linesize[0] * decoded_frame->height + decoded_frame->linesize[1], decoded_frame->data[2], decoded_frame->linesize[2]); // V
+
+            // free 
+            av_frame_free(&frame);
+            av_frame_free(&decoded_frame);
+        } else {
+             // No data generated
+        }
+
+        // Free the packet after use
+        av_packet_free(&pkt);
+#endif
     }else {
         printf("buffer can not be null \n");
     }
@@ -168,14 +293,32 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     int _coded_width = avctx->coded_width;
     int _coded_height = avctx->coded_height;
             
-    //open file
+    //alloc
+    AVCodec *baseenc_codec = avcodec_find_encoder(AV_CODEC_ID_HEVC);
+    if (!baseenc_codec) {
+        return AVERROR_UNKNOWN;
+    }
+
+    ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
+    if (!ctx->baseenc_ctx) {
+        return AVERROR(ENOMEM);
+    }
+
+    AVCodec *basedec_codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+    ctx->basedec_ctx = avcodec_alloc_context3(basedec_codec);
+    if (!ctx->basedec_ctx) {
+        return AVERROR(ENOMEM);
+    }
+    
+    ctx->p_base_ctx.baseenc_ctx = ctx->baseenc_ctx;
+    ctx->p_base_ctx.basedec_ctx = ctx->basedec_ctx;
 
     //init sevc 
-   
     SEVC_CONFIGURE get_cfg = {
         .width = _coded_width,
         .height = _coded_height,
         .layer_enc = ctx->layers,
+        .base_ctx = (void *)&ctx->p_base_ctx,
     };
     if(sevc_encode_init(get_cfg) != SEVC_ERRORCODE_NONE_ERROR){
         av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init error \n");
@@ -187,7 +330,37 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 #if vcu_src_use_shm
     mmap_shared_memory();
 #endif
+    SEVC_CODECPARAM baseenc_get_param = {0};
+    sevc_encode_get_codecparam(&baseenc_get_param);
     
+    //init baseenc ctx
+    ctx->baseenc_ctx->bit_rate = 400000;
+    ctx->baseenc_ctx->width = baseenc_get_param.base_layer_enc_w;
+    ctx->baseenc_ctx->height = baseenc_get_param.base_layer_enc_h;
+    ctx->baseenc_ctx->time_base = (AVRational){1, 25};
+    //ctx->baseenc_ctx->gop_size = 10;
+    //ctx->baseenc_ctx->max_b_frames = 1;
+    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init avcodec_open2 start. \n");
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "preset", "veryfast", 0); 
+    av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+        avcodec_free_context(&ctx->baseenc_ctx);
+        return AVERROR_UNKNOWN;
+    }
+    av_dict_free(&opts);
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init avcodec_open2 down. \n");
+
+    //init basedec ctx
+    ctx->basedec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    if (avcodec_open2(ctx->basedec_ctx, basedec_codec, NULL) < 0) {
+        avcodec_free_context(&ctx->basedec_ctx);
+        return AVERROR_UNKNOWN;
+    }
+
 #if 0//def hw_vcu
     //baseenc
     vcu_ffmpeg_init();

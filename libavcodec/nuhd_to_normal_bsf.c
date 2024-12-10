@@ -164,6 +164,7 @@ second_field:
     bytestream2_skip(&gb, 4);
     bytestream2_skip(&gb, 1);
     av_log(ctx, AV_LOG_DEBUG,"111type:0x%02x (0x%08x) size=%d\n",type,bytestream2_tell_p(&gb),size);
+    
  
     if(type == 0x0){
         //base layer
@@ -206,6 +207,8 @@ second_field:
         
     }else{
         av_log(ctx, AV_LOG_ERROR,"error happened.\n");
+        int loop = 1000000000000000000000000000;
+        while(loop) loop--;;
     } 
     
     
