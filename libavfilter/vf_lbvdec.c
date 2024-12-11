@@ -117,7 +117,7 @@ static void image_copy_plane(uint8_t *dst, int dst_linesize,
 }
 
 //for YUV data, frame->data[0] save Y, frame->data[1] save U, frame->data[2] save V
-static int frame_copy_video(AVFrame *dst, const AVFrame *src)
+static int frame_process_video(AVFilterContext *ctx,AVFrame *dst, const AVFrame *src)
 {
     int i, planes;
     SEVC_DEC_PARAM_S dec_param;
@@ -125,7 +125,7 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
     int get_roi_y = -1;
     int lbvdec_enhance_data_size = 0;
     uint8_t *lbvdec_enhance_data = NULL;
-    //printf("frame_copy_video enter src(%dx%d) dst(%dx%d)\n",src->width,src->height,dst->width,dst->height);
+    //printf("frame_process_video enter src(%dx%d) dst(%dx%d)\n",src->width,src->height,dst->width,dst->height);
 
     planes = av_pix_fmt_count_planes(dst->format);
     //make sure data is valid
@@ -140,7 +140,7 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
 
     if(planes_nb < 3) return AVERROR(EINVAL);;//now only support 3plane yuv420p
 
-    //printf("frame_copy_video planes_nb:%d \n",planes_nb);
+    //printf("frame_process_video planes_nb:%d \n",planes_nb);
 
     dec_param.data_in_luma = src->data[0];
     dec_param.data_in_chroma_u = src->data[1];
@@ -158,7 +158,7 @@ static int frame_copy_video(AVFrame *dst, const AVFrame *src)
         get_roi_x = AV_RB32(lbvdec_enhance_data);
         get_roi_y = AV_RB32(lbvdec_enhance_data + 4);
         lbvdec_enhance_data_size = AV_RB32(lbvdec_enhance_data + 8);
-        printf("[nuhd]0x%08x vf get: roi(%d,%d) , size=%d \n",lbvdec_enhance_data,get_roi_x,get_roi_y,lbvdec_enhance_data_size);
+        av_log(ctx, AV_LOG_DEBUG,"[nuhd]0x%08x vf get: roi(%d,%d) , size=%d \n",lbvdec_enhance_data,get_roi_x,get_roi_y,lbvdec_enhance_data_size);
 #if 0//debug
         static int lbvdec_enhance_data_counnter = 0;
         char enhance_data_layer1_name[256];
@@ -216,7 +216,7 @@ static int do_conversion(AVFilterContext *ctx, void *arg, int jobnr,
     AVFrame *dst = td->out;
     AVFrame *src = td->in;
 
-    frame_copy_video(dst, src);
+    frame_process_video(ctx , dst, src);
     return 0;
 }
 
@@ -487,7 +487,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     // if(res = avctx->internal->execute(avctx, do_conversion, &td, NULL, FFMIN(outlink->h, avctx->graph->nb_threads))) {
     //     return res;
     // }
-    frame_copy_video(out, frame);
+    frame_process_video(avctx,out, frame);
 
     av_frame_free(&frame);
 

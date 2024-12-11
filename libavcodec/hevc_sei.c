@@ -336,6 +336,7 @@ static int decode_nal_sei_prefix(GetBitContext *gb, GetByteContext *gbyte,
 static int decode_nal_sei_suffix(GetBitContext *gb, GetByteContext *gbyte,
                                  void *logctx, HEVCSEI *s, int type)
 {
+    av_log(logctx, AV_LOG_DEBUG, "decode_nal_sei_suffix type %d\n", type);
     switch (type) {
     case SEI_TYPE_DECODED_PICTURE_HASH:
         return decode_nal_sei_decoded_picture_hash(&s->picture_hash, gbyte);
@@ -366,20 +367,22 @@ static int decode_nal_sei_message(GetByteContext *gb, void *logctx, HEVCSEI *s,
         payload_type += byte;
         //av_log(logctx, AV_LOG_DEBUG, ">>payload_type:%d\n",payload_type);
     }
-    av_log(logctx, AV_LOG_DEBUG, "payload_type:%d\n",payload_type);
+    
     byte = 0xFF;
     while (byte == 0xFF) {
-        //av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
+        av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
         if (bytestream2_get_bytes_left(gb) < 1 + payload_size)
             return AVERROR_INVALIDDATA;
         byte          = bytestream2_get_byteu(gb);
-        //av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
+        av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
         payload_size += byte;
-        //av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
+        av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
     }
-    av_log(logctx, AV_LOG_DEBUG, "payload_size:%d\n",payload_size);
     if (bytestream2_get_bytes_left(gb) < payload_size)
         return AVERROR_INVALIDDATA;
+    av_log(logctx, AV_LOG_DEBUG, "payload_type:%d\n",payload_type);
+    av_log(logctx, AV_LOG_DEBUG, "payload_size:%d\n",payload_size);
+    av_log(logctx, AV_LOG_DEBUG, "nal_unit_type:%d(HEVC_NAL_SEI_PREFIX-%d,NAL_SEI_SUFFIX-%d)\n",nal_unit_type,HEVC_NAL_SEI_PREFIX,HEVC_NAL_SEI_SUFFIX);
     bytestream2_init(&message_gbyte, gb->buffer, payload_size);
     ret = init_get_bits8(&message_gb, gb->buffer, payload_size);
     av_assert1(ret >= 0);
