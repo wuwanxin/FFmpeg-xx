@@ -100,7 +100,7 @@ static void modify_normal_bytestream_to_nuhd(GetByteContext gb,int start,int siz
     }
 }
 static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(HEVCSEILbvencEnhanceData *s,
-                                               GetByteContext *gb)
+                                               GetByteContext *gb,void *logctx)
 {
 
     uint8_t lbvenc_enhance_type;
@@ -110,12 +110,12 @@ static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(HEVCSEILbvencEnhanceD
     int roi_y;
     
     lbvenc_enhance_type = bytestream2_get_byte(gb);
-
+    av_log(logctx, AV_LOG_DEBUG,"decode_nal_sei_decoded_nuhd_lbvenc_enhance_data enter.\n");
     if (lbvenc_enhance_type == 0xE0) {
         size = bytestream2_get_be32(gb);
         roi_x = bytestream2_get_be32(gb);
         roi_y = bytestream2_get_be32(gb);
-        //printf("lbvenc_enhance_data layer1 data...size=%d roi(%d,%d)\n",size,roi_x,roi_y);
+        av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data layer1 data...size=%d roi(%d,%d)\n",size,roi_x,roi_y);
         modify_normal_bytestream_to_nuhd(*gb,0,size);
         buffer = (uint8_t *)malloc(sizeof(uint8_t) * size);
         bytestream2_get_buffer(gb, buffer, size);
@@ -135,9 +135,9 @@ static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(HEVCSEILbvencEnhanceD
         s->layer1_roi_y = roi_y;
 
     } else if (lbvenc_enhance_type == 0xE1) {
-        //printf("lbvenc_enhance_data layer2 data...\n");
+        av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data layer2 data...\n");
         size = bytestream2_get_be32(gb);
-        //printf("lbvenc_enhance_data layer2 data...size=%d\n",size);
+        av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data layer2 data...size=%d\n",size);
         modify_normal_bytestream_to_nuhd(*gb,0,size);
         buffer = (uint8_t *)malloc(sizeof(uint8_t) * size);
         bytestream2_get_buffer(gb, buffer, size);
@@ -341,7 +341,7 @@ static int decode_nal_sei_suffix(GetBitContext *gb, GetByteContext *gbyte,
     case SEI_TYPE_DECODED_PICTURE_HASH:
         return decode_nal_sei_decoded_picture_hash(&s->picture_hash, gbyte);
     case SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA:
-        return decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&s->lbvenc_enhance_data, gbyte);
+        return decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&s->lbvenc_enhance_data, gbyte,logctx);
     default:
         av_log(logctx, AV_LOG_DEBUG, "Skipped SUFFIX SEI %d\n", type);
         return 0;
@@ -370,13 +370,13 @@ static int decode_nal_sei_message(GetByteContext *gb, void *logctx, HEVCSEI *s,
     
     byte = 0xFF;
     while (byte == 0xFF) {
-        av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
+        //av_log(logctx, AV_LOG_DEBUG, "bytestream2_get_bytes_left(gb)=%d :: (1 + payload_size)=%d\n",bytestream2_get_bytes_left(gb),1 + payload_size);
         if (bytestream2_get_bytes_left(gb) < 1 + payload_size)
             return AVERROR_INVALIDDATA;
         byte          = bytestream2_get_byteu(gb);
-        av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
+        //av_log(logctx, AV_LOG_DEBUG, ">>byte:%d\n",byte);
         payload_size += byte;
-        av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
+        //av_log(logctx, AV_LOG_DEBUG, ">>payload_size:%d\n",payload_size);
     }
     if (bytestream2_get_bytes_left(gb) < payload_size)
         return AVERROR_INVALIDDATA;

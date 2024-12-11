@@ -153,6 +153,7 @@ static int frame_process_video(AVFilterContext *ctx,AVFrame *dst, const AVFrame 
     sevc_layer1_int_dec_one_frame_with_param(dec_param);
 
     
+    //if(src->opaque && (lbvdec_enhance_data_size>12)){
     if(src->opaque){
         lbvdec_enhance_data = (uint8_t *)src->opaque;
         get_roi_x = AV_RB32(lbvdec_enhance_data);
@@ -182,6 +183,7 @@ static int frame_process_video(AVFilterContext *ctx,AVFrame *dst, const AVFrame 
 #endif
         sevc_layer1_do_dec_one_frame(lbvdec_enhance_data + 12,lbvdec_enhance_data_size,get_roi_x,get_roi_y);
     }else{
+        av_log(ctx, AV_LOG_DEBUG,"[nuhd] sei rx:0x%08x vf get no roi \n");
         sevc_layer1_do_dec_one_frame(NULL,0,0,0);
     }
 

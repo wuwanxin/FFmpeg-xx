@@ -2507,7 +2507,7 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *arg)
     int y_ctb       = 0;
     int ctb_addr_ts = s->ps.pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs];
     int ret;
-
+    av_log(s->avctx, AV_LOG_DEBUG, "hls_decode_entry enter. sw hevc decode slice data.\n");
     if (!ctb_addr_ts && s->sh.dependent_slice_segment_flag) {
         av_log(s->avctx, AV_LOG_ERROR, "Impossible initial tile.\n");
         return AVERROR_INVALIDDATA;
@@ -3138,7 +3138,7 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
                 ret = AVERROR_PATCHWELCOME;
                 goto fail;
             }
-
+            av_log(s->avctx, AV_LOG_DEBUG,"s->threads_number(%d).s->sh.num_entry_point_offsets(%d)\n",s->threads_number,s->sh.num_entry_point_offsets);
             if (s->threads_number > 1 && s->sh.num_entry_point_offsets > 0)
                 ctb_addr_ts = hls_slice_data_wpp(s, nal);
             else
@@ -3439,9 +3439,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             AV_WB32(nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x);
             AV_WB32(nuhd_extradata_buffer + 4,s->sei.lbvenc_enhance_data.layer1_roi_y);
             AV_WB32(nuhd_extradata_buffer + 8,s->sei.lbvenc_enhance_data.layer1_size);
-            //printf("[nuhd]0x%08x roi pos(%d,%d) data_size(%d) \n",nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
+            av_log(avctx, AV_LOG_DEBUG,"[nuhd]sei tx1: 0x%08x roi pos(%d,%d) data_size(%d) \n",nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
             memcpy(nuhd_extradata_buffer + 12, s->sei.lbvenc_enhance_data.layer1_data, s->sei.lbvenc_enhance_data.layer1_size);
-            s->ref->frame->opaque = nuhd_extradata_buffer;
+            //s->ref->frame->opaque = nuhd_extradata_buffer;
+            s->output_frame->opaque = nuhd_extradata_buffer;
             //av_dict_set(&metadata, "lb_enhance_data_enable", (const char *)nuhd_extradata_buffer->data, 0);
             
         }else{
@@ -3453,8 +3454,9 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             AV_WB32(nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x);
             AV_WB32(nuhd_extradata_buffer + 4,s->sei.lbvenc_enhance_data.layer1_roi_y);
             AV_WB32(nuhd_extradata_buffer + 8,s->sei.lbvenc_enhance_data.layer1_size);
-            //printf("[nuhd]0x%08x roi pos(%d,%d) data_size(%d) \n",nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
+            av_log(avctx, AV_LOG_DEBUG,"[nuhd]sei tx2: 0x%08x roi pos(%d,%d) data_size(%d) \n",nuhd_extradata_buffer,s->sei.lbvenc_enhance_data.layer1_roi_x,s->sei.lbvenc_enhance_data.layer1_roi_y,s->sei.lbvenc_enhance_data.layer1_size);
             memcpy(nuhd_extradata_buffer + 12, s->sei.lbvenc_enhance_data.layer1_data, s->sei.lbvenc_enhance_data.layer1_size);
+            //s->ref->frame->opaque = nuhd_extradata_buffer;
             s->output_frame->opaque = nuhd_extradata_buffer;
             //av_dict_set(&metadata, "lb_enhance_data_enable", (const char *)nuhd_extradata_buffer->data, 0);
         }
@@ -3471,7 +3473,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     if (s->output_frame->buf[0]) {
         //nuhd add
         
-        av_log(avctx, AV_LOG_DEBUG, "Move frame POC %d.\n", s->poc);
+        av_log(avctx, AV_LOG_DEBUG, "Move frame POC %d. frame 0x%08x\n", s->poc,rframe);
         av_frame_move_ref(rframe, s->output_frame);
         *got_output = 1;
     }
