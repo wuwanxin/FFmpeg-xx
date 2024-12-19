@@ -16,6 +16,7 @@
 #include "packet_internal.h"
 #include "atsc_a53.h"
 #include "sei.h"
+#include "lbvenc.h"
 
 #include <float.h>
 #include <math.h>
@@ -28,7 +29,6 @@
 
 //baseenc vcu
 //#define hw_vcu
-#define vcu_src_use_shm 0
 
 #ifdef hw_vcu
 #include "lib_common/PixMapBuffer.h"
@@ -42,19 +42,6 @@
 #include "lib_common_enc/IpEncFourCC.h"
 #include "lib_common_enc/EncBuffers.h"
 #include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
-
-#if vcu_src_use_shm
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#define SHARE_MEM_NAME "/my_shared_memory"
-#define SHARE_MEM_SIZE (1920 * 1088 * 3)
-static int shm_fd;
-static uint8_t *ptr;
-static uint8_t smem_tmp_buffer[SHARE_MEM_SIZE] = {0};
-#endif
 #endif
 
 typedef struct {
@@ -70,6 +57,7 @@ typedef struct {
 
     //encoder options
     int layers;
+    int base_codec;
 
     // baseenc_ctx
     AVCodecContext *baseenc_ctx; 
@@ -77,52 +65,6 @@ typedef struct {
     BaseEncoderContext p_base_ctx;
 } LowBitrateEncoderContext;
 
-#if vcu_src_use_shm
-
-static void mmap_shared_memory(){
-    shm_fd = shm_open(SHARE_MEM_NAME, O_RDWR, 0666);
-    if (shm_fd == -1) {
-        perror("shm_open");
-        exit(1);
-    }
-
-    ptr = (uint8_t *)mmap(0, SHARE_MEM_SIZE, PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (ptr == MAP_FAILED) {
-        perror("mmap");
-        exit(1);
-    }
-}
-
-static void close_shared_memory(){
-    if (shm_fd == -1) {
-        perror("close_shared_memory error");
-        exit(1);
-    }
-
-    if (munmap(ptr, SHARE_MEM_SIZE) == -1) {
-        perror("munmap");
-        exit(1);
-    }
-
-    if (close(shm_fd) == -1) {
-        perror("close");
-        exit(1);
-    }
-}
-
-
-static void write_to_shared_memory(uint8_t *ori,int size) {
-
-    if (shm_fd == -1) {
-        perror("write_to_shared_memory error");
-        exit(1);
-    }
-
-    memcpy(ptr,ori,size);
-    
-}
-
-#endif
 
 static AVFrame* create_baseenc_yuv420p_frame(uint8_t *buffer, int width, int height) {
     // Allocate an AVFrame instance
@@ -187,34 +129,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
         BaseEncoderContext *p_base_ctx = (BaseEncoderContext *)basectx;
         AVCodecContext *enc_ctx = p_base_ctx->baseenc_ctx; 
         AVCodecContext *dec_ctx = p_base_ctx->basedec_ctx; 
-#if 0
-#if vcu_src_use_shm
-        write_to_shared_memory((uint8_t *)yuv,w * h * 3 / 2 * framenum);
-        FILE* fp_src = fopen("./src-shm.yuv", "wb");
-        fwrite(ptr, 1, w * h * 3 / 2 , fp_src);           
-        fclose(fp_src);
-#else
-        FILE* fp_src = fopen("./src.yuv", "wb");
-        fwrite(yuv, 1, w * h * 3 / 2 * framenum, fp_src);           
-        fclose(fp_src);
-#endif
-        char command[200];
-        //sprintf(command, "./baseenc/TAppEncoderStatic -c ./baseenc/encoder_intra_main.cfg -c ./baseenc/sequence.cfg");
-        sprintf(command, "bash ./base_encode_test.sh");
-        system(command);
 
-        FILE* fp_recon = fopen("./rec.yuv", "rb");
-        fread(recon, 1, w * h * 3 / 2 , fp_recon);
-        fclose(fp_recon);
-
-        FILE* fp_bin = fopen("./str.bin", "rb");
-        fseek(fp_bin, 0, SEEK_END);
-        int file_size = ftell(fp_bin);
-        rewind(fp_bin);
-        fread(str, 1, file_size , fp_bin);
-        fclose(fp_bin);
-        *str_len = file_size;
-#else
         AVFrame *frame = create_baseenc_yuv420p_frame(yuv,w,h);
         
         ret = avcodec_send_frame((AVCodecContext*)enc_ctx, frame);
@@ -236,6 +151,14 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
             if (pkt->size > 0) {
                 memcpy(str, pkt->data, pkt->size); // Copy packet data to str
                 *str_len = pkt->size;              // Set str_len to the size of the packet
+#if 0
+                static FILE *base_bin_fp;
+                if(!base_bin_fp) base_bin_fp = fopen("testout/base_str.bin","wb");
+                if(base_bin_fp){
+                    fwrite(pkt->data, 1, pkt->size , base_bin_fp);
+                    fflush(base_bin_fp);
+                }
+#endif
             }
 
             pkt->stream_index = 0; // Set the stream index to video
@@ -267,16 +190,17 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
 
         // Free the packet after use
         av_packet_free(&pkt);
-#endif
+
     }else {
         printf("buffer can not be null \n");
     }
     return 0;
 }
 
-static av_cold int lbvc_init(AVCodecContext *avctx) {
+static av_cold int __lbvc_init(AVCodecContext *avctx) {
+    enum AVCodecID base_codec_id;
 
-    av_log(avctx, AV_LOG_DEBUG,"lbvc_init enter! \n");
+    av_log(avctx, AV_LOG_DEBUG,"__lbvc_init enter! \n");
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     // 初始化编码器
 
@@ -286,15 +210,20 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     
             
     av_log(avctx, AV_LOG_DEBUG,"yuv file loading...layers:%d \n",ctx->layers);
+    av_log(avctx, AV_LOG_DEBUG,"yuv file loading...base_codec:%d \n",ctx->base_codec);
+    
 
     //init uncompressed data context
     int _width = avctx->width;
     int _height = avctx->height;
     int _coded_width = avctx->coded_width;
     int _coded_height = avctx->coded_height;
+
             
     //alloc
-    AVCodec *baseenc_codec = avcodec_find_encoder(AV_CODEC_ID_HEVC);
+    base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(ctx->base_codec);
+    
+    AVCodec *baseenc_codec = avcodec_find_encoder(base_codec_id);
     if (!baseenc_codec) {
         return AVERROR_UNKNOWN;
     }
@@ -304,7 +233,7 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
         return AVERROR(ENOMEM);
     }
 
-    AVCodec *basedec_codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+    AVCodec *basedec_codec = avcodec_find_decoder(base_codec_id);
     ctx->basedec_ctx = avcodec_alloc_context3(basedec_codec);
     if (!ctx->basedec_ctx) {
         return AVERROR(ENOMEM);
@@ -327,9 +256,6 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
 
     SET_CALLBACK_DO_BASE_ENC(__base_encode_callback_function);
 
-#if vcu_src_use_shm
-    mmap_shared_memory();
-#endif
     SEVC_CODECPARAM baseenc_get_param = {0};
     sevc_encode_get_codecparam(&baseenc_get_param);
     
@@ -372,6 +298,24 @@ static av_cold int lbvc_init(AVCodecContext *avctx) {
     }
 #endif
     return 0;
+}
+
+static av_cold int lbvc_init(AVCodecContext *avctx){
+    LowBitrateEncoderContext *ctx = avctx->priv_data;
+    ctx->base_codec = 0;
+    return __lbvc_init(avctx);
+}
+
+static av_cold int lbvc_hevc_init(AVCodecContext *avctx){
+    LowBitrateEncoderContext *ctx = avctx->priv_data;
+    ctx->base_codec = 1;
+    return __lbvc_init(avctx);
+}
+
+static av_cold int hlbvc_init(AVCodecContext *avctx){
+    LowBitrateEncoderContext *ctx = avctx->priv_data;
+    ctx->base_codec = 2;
+    return __lbvc_init(avctx);
 }
 
 static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
@@ -419,10 +363,10 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
     }
     av_log(avctx, AV_LOG_DEBUG,"========================================= \n");
 
-    static FILE *fp;
     switch(frame->format){
         case AV_PIX_FMT_YUV420P:
 #if 0
+            static FILE *fp;
             if(!fp) fp = fopen("testout/ffmpeg_yuv_in.yuv","wb");
             if(fp){
                 fwrite(tmp->data[0], 1, avctx->coded_width * avctx->coded_height  , fp);
@@ -464,11 +408,14 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         }
         av_log(avctx, AV_LOG_DEBUG,"lbvenc packet size:%d \n",pkt->size);
         bytestream2_init_writer(&pb, pkt->data, pkt->size);
-        
+        //top header
+        bytestream2_put_byte(&pb, ctx->base_codec);
+
         //base
         bytestream2_put_be32(&pb, out.base_size);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_buffer(&pb,out.base_buf,out.base_size);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: base size-%d\n",out.base_size);
 
         //enhance size and header
         av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
@@ -517,9 +464,6 @@ static av_cold int lbvc_close(AVCodecContext *avctx) {
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     // 清理编码器
 
-#if vcu_src_use_shm
-    close_shared_memory();
-#endif
     return 0;
 }
 
@@ -529,6 +473,12 @@ static const AVOption lbvc_options[] = {
     {"layers", "set the number of enc layers", OFFSET(layers), AV_OPT_TYPE_INT, {.i64 = 2}, 0, 2, VE, "layers"},
     { "1",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0,  VE, "layers" },
     { "2",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 2 }, 0, 0,  VE, "layers" },
+#if 0
+    {"base_codec", "set the number of base codec", OFFSET(base_codec), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 2, VE, "base_codec"},
+    { "0",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 0 }, 0, 0,  VE, "base_codec" },
+    { "1",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0,  VE, "base_codec" },
+    { "2",            "",                     0,              AV_OPT_TYPE_CONST, { .i64 = 2 }, 0, 0,  VE, "base_codec" },
+#endif
     {NULL} // end flag
 };
 
@@ -579,6 +529,44 @@ FFCodec ff_lbvc_encoder = {
     .p.wrapper_name   = "lbvenc",
     .priv_data_size   = sizeof(LowBitrateEncoderContext),
     .init             = lbvc_init,
+    FF_CODEC_ENCODE_CB(lbvc_encode),
+    .flush            = lbvc_flush,
+    .close            = lbvc_close,
+    .defaults         = lbvc_defaults,
+    .p.pix_fmts       = pix_fmts_all,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
+                      ,
+};
+
+FFCodec ff_lbvc_hevc_encoder = {
+    .p.name           = "lbvenc_hevc",
+    CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Encoder"),
+    .p.type           = AVMEDIA_TYPE_VIDEO,
+    .p.id             = AV_CODEC_ID_LBVC_HEVC,
+    .p.capabilities   = AV_CODEC_CAP_DR1 ,
+    .p.priv_class     = &lbvc_class,
+    .p.wrapper_name   = "lbvenc_hevc",
+    .priv_data_size   = sizeof(LowBitrateEncoderContext),
+    .init             = lbvc_hevc_init,
+    FF_CODEC_ENCODE_CB(lbvc_encode),
+    .flush            = lbvc_flush,
+    .close            = lbvc_close,
+    .defaults         = lbvc_defaults,
+    .p.pix_fmts       = pix_fmts_all,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
+                      ,
+};
+
+FFCodec ff_hlbvc_encoder = {
+    .p.name           = "hlbvenc",
+    CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Encoder"),
+    .p.type           = AVMEDIA_TYPE_VIDEO,
+    .p.id             = AV_CODEC_ID_HLBVC,
+    .p.capabilities   = AV_CODEC_CAP_DR1 ,
+    .p.priv_class     = &lbvc_class,
+    .p.wrapper_name   = "hlbvenc",
+    .priv_data_size   = sizeof(LowBitrateEncoderContext),
+    .init             = hlbvc_init,
     FF_CODEC_ENCODE_CB(lbvc_encode),
     .flush            = lbvc_flush,
     .close            = lbvc_close,

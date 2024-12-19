@@ -436,7 +436,10 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
             stream_type = STREAM_TYPE_PRIVATE_DATA;
         }
         break;
-    case AV_CODEC_ID_NUHD_NORMAL:
+    case AV_CODEC_ID_NUHD_NORMAL_H264:
+        stream_type = STREAM_TYPE_VIDEO_H264;
+        break;
+    case AV_CODEC_ID_NUHD_NORMAL_HEVC:
         stream_type = STREAM_TYPE_VIDEO_HEVC;
         break;
     default:
@@ -490,8 +493,10 @@ static int get_m2ts_stream_type(AVFormatContext *s, AVStream *st)
     case AV_CODEC_ID_HDMV_TEXT_SUBTITLE:
         stream_type = 0x92;
         break;
-    case AV_CODEC_ID_NUHD_NORMAL:
-        printf("hhhh\n");
+    case AV_CODEC_ID_NUHD_NORMAL_H264:
+        stream_type = STREAM_TYPE_VIDEO_H264;
+        break;
+    case AV_CODEC_ID_NUHD_NORMAL_HEVC:
         stream_type = STREAM_TYPE_VIDEO_HEVC;
         break;
     default:

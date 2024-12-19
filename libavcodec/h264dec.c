@@ -859,7 +859,11 @@ static int output_frame(H264Context *h, AVFrame *dst, H264Picture *srcp)
 
     if (!(h->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN))
         av_frame_remove_side_data(dst, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
-
+    
+    //nuhd add
+    if(h->sei.lbvenc_enhance_data.present){
+        lbvenc_enhance_data_opaque_preprocess(h->sei.lbvenc_enhance_data,&dst->opaque);
+    }
     return 0;
 fail:
     av_frame_unref(dst);

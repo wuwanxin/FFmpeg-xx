@@ -24,6 +24,9 @@
 #include "h264_ps.h"
 #include "sei.h"
 
+//nuhd add
+#include "lbvenc.h"
+
 
 /**
  * pic_struct in picture timing SEI message
@@ -122,6 +125,8 @@ typedef struct H264SEIContext {
     H264SEIRecoveryPoint recovery_point;
     H264SEIBufferingPeriod buffering_period;
     H264SEIGreenMetaData green_metadata;
+    //nuhd add 
+    H2645SEILbvencEnhanceData lbvenc_enhance_data;
 } H264SEIContext;
 
 struct H264ParamSets;

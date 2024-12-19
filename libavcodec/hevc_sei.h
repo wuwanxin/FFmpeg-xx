@@ -30,6 +30,9 @@
 #include "h2645_sei.h"
 #include "sei.h"
 
+//nuhd_add
+#include "lbvenc.h"
+
 
 typedef enum {
         HEVC_SEI_PIC_STRUCT_FRAME_DOUBLING = 7,
@@ -40,20 +43,6 @@ typedef struct HEVCSEIPictureHash {
     uint8_t       md5[3][16];
     uint8_t is_md5;
 } HEVCSEIPictureHash;
-
-//nuhd_add
-typedef struct HEVCSEILbvencEnhanceData {
-    int present;
-    uint8_t *layer1_data;
-    uint32_t layer1_size;
-    int layer1_roi_x;
-    int layer1_roi_y;
-    uint8_t *layer2_data;
-    uint32_t layer2_size;
-    int layer2_roi_x;
-    int layer3_roi_y;
-
-} HEVCSEILbvencEnhanceData;
 
 typedef struct HEVCSEIFramePacking {
     int present;
@@ -116,7 +105,7 @@ typedef struct HEVCSEI {
     HEVCSEITimeCode timecode;
 
     //nuhd add 
-    HEVCSEILbvencEnhanceData lbvenc_enhance_data;
+    H2645SEILbvencEnhanceData lbvenc_enhance_data;
 } HEVCSEI;
 
 struct HEVCParamSets;

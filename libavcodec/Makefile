@@ -1136,6 +1136,11 @@ OBJS-$(CONFIG_LIBXAVS2_ENCODER)           += libxavs2.o
 OBJS-$(CONFIG_LIBXVID_ENCODER)            += libxvid.o
 OBJS-$(CONFIG_LIBZVBI_TELETEXT_DECODER)   += libzvbi-teletextdec.o ass.o
 
+# lbvc (individual)
+#CONFIG_LIBLBVC_ENCODER
+OBJS-$(CONFIG_LBVC_ENCODER)            += lbvenc.o lbvenc_common.o
+OBJS-$(CONFIG_E2ENC_ENCODER)            += e2enc.o
+
 # parsers
 OBJS-$(CONFIG_AAC_LATM_PARSER)         += latm_parser.o
 OBJS-$(CONFIG_AAC_PARSER)              += aac_parser.o aac_ac3_parser.o
@@ -1258,11 +1263,6 @@ OBJS-$(HAVE_THREADS)                   += pthread.o pthread_slice.o pthread_fram
 OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 
 
-# lbvc (individual)
-#CONFIG_LIBLBVC_ENCODER
-OBJS-$(CONFIG_LBVC_ENCODER)            += lbvenc.o
-OBJS-$(CONFIG_E2ENC_ENCODER)            += e2enc.o
-
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)           += avcodecres.o
 
@@ -1298,6 +1298,7 @@ SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h vdpau_internal.h
 SKIPHEADERS-$(CONFIG_VIDEOTOOLBOX)     += videotoolbox.h vt_internal.h
 SKIPHEADERS-$(CONFIG_V4L2_M2M)         += v4l2_buffers.h v4l2_context.h v4l2_m2m.h
 SKIPHEADERS-$(CONFIG_ZLIB)             += zlib_wrapper.h
+SKIPHEADERS-$(CONFIG_LBVC_ENCODER)     += lbvenc.h
 
 TESTPROGS = avcodec                                                     \
             avpacket                                                    \

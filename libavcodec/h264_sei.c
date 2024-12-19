@@ -228,12 +228,19 @@ static int decode_green_metadata(H264SEIGreenMetaData *h, GetByteContext *gb)
     return 0;
 }
 
+static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(H2645SEILbvencEnhanceData *s,
+                                               GetByteContext *gb,void *logctx)
+{
+    
+    return lbvenc_enhance_data_decode(s,gb,logctx);
+}
+
 int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
                        const H264ParamSets *ps, void *logctx)
 {
     GetByteContext gbyte;
     int master_ret = 0;
-
+    
     av_assert1((get_bits_count(gb) % 8) == 0);
     bytestream2_init(&gbyte, gb->buffer + get_bits_count(gb) / 8,
                      get_bits_left(gb) / 8);
@@ -267,7 +274,6 @@ int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
         ret = init_get_bits8(&gb_payload, gbyte.buffer, size);
         if (ret < 0)
             return ret;
-
         switch (type) {
         case SEI_TYPE_PIC_TIMING: // Picture timing SEI
             ret = decode_picture_timing(&h->picture_timing, &gbyte_payload, logctx);
@@ -280,6 +286,9 @@ int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
             break;
         case SEI_TYPE_GREEN_METADATA:
             ret = decode_green_metadata(&h->green_metadata, &gbyte_payload);
+            break;
+        case SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA:
+            ret = decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&h->lbvenc_enhance_data, &gbyte_payload,logctx);
             break;
         default:
             ret = ff_h2645_sei_message_decode(&h->common, type, AV_CODEC_ID_H264,

@@ -28,10 +28,21 @@
 #include "bsf.h"
 #include "bsf_internal.h"
 #include "bytestream.h"
+#include "lbvenc.h"
 
 static av_cold int init(AVBSFContext *ctx)
 {
-    ctx->par_out->codec_id = AV_CODEC_ID_NUHD_NORMAL;
+    
+    switch(ctx->par_in->codec_id){
+        case AV_CODEC_ID_LBVC:
+            ctx->par_out->codec_id = AV_CODEC_ID_NUHD_NORMAL_H264;
+            break;
+        case AV_CODEC_ID_LBVC_HEVC:
+        case AV_CODEC_ID_HLBVC:
+            ctx->par_out->codec_id = AV_CODEC_ID_NUHD_NORMAL_HEVC;
+            break;     
+    }
+    
     return 0;
 }
 
@@ -132,6 +143,7 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     PutByteContext pb;
     AVPacket *in;
     int ret;
+    int base_codec_id_internal;
 
     uint8_t *pos ;
     uint32_t size ;
@@ -141,6 +153,7 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     int end = 0;
     int field_s = 0;
     int write_down = 0;
+    enum AVCodecID base_codec_id;
 
     ret = ff_bsf_get_packet(ctx, &in);
     if (ret < 0)
@@ -156,6 +169,12 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     bytestream2_init(&gb, in->data, in->size);
     bytestream2_init_writer(&pb, out->data, out->size);
 
+    pos = in->data + end;
+    base_codec_id_internal = AV_RB8(pos);
+    end += 1;
+    bytestream2_skip(&gb, 1);
+    base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(base_codec_id_internal);
+    
     
 second_field:
     pos = in->data + end;
@@ -177,8 +196,12 @@ second_field:
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x00);
         bytestream2_put_byte(&pb, 0x01);
-        bytestream2_put_byte(&pb, 0x50);
-        bytestream2_put_byte(&pb, 0x01);
+        if(base_codec_id == AV_CODEC_ID_HEVC){
+            bytestream2_put_byte(&pb, 0x50);
+            bytestream2_put_byte(&pb, 0x01);
+        }else if(base_codec_id == AV_CODEC_ID_H264){
+            bytestream2_put_byte(&pb, 0x06);
+        }
         bytestream2_put_byte(&pb, 0xCD);
         //write size for hevc sei
         av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size); 
@@ -189,7 +212,7 @@ second_field:
         }
         bytestream2_put_byte(&pb,write_total_size);
         av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size);
-    }else if(type == 0x10){   
+    }else if(type == 0x10){ 
         bytestream2_put_byte(&pb, 0xE0);
         bytestream2_put_be32(&pb, size);
         bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi x
@@ -204,7 +227,6 @@ second_field:
             modify_bytestream(gb,0,size);
             bytestream2_copy_buffer(&pb, &gb, size);
         }
-        
     }else{
         av_log(ctx, AV_LOG_ERROR,"error happened.\n");
         int loop = 1000000000000000000000000000;
@@ -223,7 +245,7 @@ second_field:
     av_log(ctx, AV_LOG_DEBUG,"nuhd_to_normal int:%d , out packet size:%d \n",in->size,out->size);
 
     //debug
-#if 1
+#if 0
     static FILE *fp = NULL;
     if(!fp) fp = fopen("check_bsf.bin","w");
     if(fp) fwrite(out->data,1,out->size,fp);
@@ -348,18 +370,20 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
     int ret = 0;
     switch(ctx->par_in->codec_id){
         case AV_CODEC_ID_LBVC:
+        case AV_CODEC_ID_LBVC_HEVC:
             ret = filter_lbvc(ctx,out);
             break;
         case AV_CODEC_ID_E2ENC:
             ret = filter_e2e(ctx,out);
             break;
     }
+
     return ret;
 }
 
 const FFBitStreamFilter ff_nuhd_to_normal_bsf = {
     .p.name         = "nuhd_to_normal",
-    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_NONE },
+    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_LBVC_HEVC, AV_CODEC_ID_HLBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_NONE },
     .init           = init,
     .filter         = filter,
 };
