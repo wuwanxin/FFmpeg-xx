@@ -453,9 +453,14 @@ static av_cold int omx_component_init(AVCodecContext *avctx, const char *role)
         video_port_format.nPortIndex = s->in_port;
         if (OMX_GetParameter(s->handle, OMX_IndexParamVideoPortFormat, &video_port_format) != OMX_ErrorNone)
             break;
+        av_log(avctx, AV_LOG_DEBUG, "supported pixel format (%d)\n", video_port_format.eColorFormat);
         if (video_port_format.eColorFormat == OMX_COLOR_FormatYUV420Planar ||
-            video_port_format.eColorFormat == OMX_COLOR_FormatYUV420PackedPlanar) {
+            video_port_format.eColorFormat == OMX_COLOR_FormatYUV420PackedPlanar ||
+            video_port_format.eColorFormat == OMX_COLOR_FormatYUV420SemiPlanar ) {
             s->color_format = video_port_format.eColorFormat;
+            if(s->color_format == OMX_COLOR_FormatYUV420SemiPlanar){
+                avctx->pix_fmt = AV_PIX_FMT_NV12;
+            }
             break;
         }
     }
@@ -743,9 +748,7 @@ static int omx_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         int need_copy;
         buffer = get_buffer(&s->input_mutex, &s->input_cond,
                             &s->num_free_in_buffers, s->free_in_buffers, 1);
-
         buffer->nFilledLen = av_image_fill_arrays(dst, linesize, buffer->pBuffer, avctx->pix_fmt, s->stride, s->plane_size, 1);
-
         if (s->input_zerocopy) {
             uint8_t *src[4] = { NULL };
             int src_linesize[4];
@@ -927,7 +930,7 @@ static const AVOption options[] = {
 };
 
 static const enum AVPixelFormat omx_encoder_pix_fmts[] = {
-    AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE
+    AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12, AV_PIX_FMT_NONE
 };
 
 static const AVClass omx_mpeg4enc_class = {
