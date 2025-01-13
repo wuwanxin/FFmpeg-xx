@@ -27,23 +27,6 @@
 
 #include "bytestream.h"
 
-//baseenc vcu
-//#define hw_vcu
-
-#ifdef hw_vcu
-#include "lib_common/PixMapBuffer.h"
-#include "lib_common/BufferStreamMeta.h"
-#include "lib_common/BufferPictureMeta.h"
-#include "lib_common/StreamBuffer.h"
-#include "lib_common/Error.h"
-#include "lib_encode/lib_encoder.h"
-#include "lib_rtos/lib_rtos.h"
-#include "lib_common_enc/RateCtrlMeta.h"
-#include "lib_common_enc/IpEncFourCC.h"
-#include "lib_common_enc/EncBuffers.h"
-#include "lib_ffmpeg_wrapper/vcu_c_warpper.h"
-#endif
-
 typedef struct {
     AVCodecContext *baseenc_ctx; 
     AVCodecContext *basedec_ctx; 
@@ -107,6 +90,50 @@ static AVFrame* create_baseenc_yuv420p_frame(uint8_t *buffer, int width, int hei
     return frame;
 }
 
+static AVFrame* create_baseenc_nv12_frame(uint8_t *buffer, int width, int height) {
+    // Allocate an AVFrame instance
+    AVFrame *frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Could not allocate memory for AVFrame\n");
+        return NULL;
+    }
+
+    // Set parameters for the AVFrame
+    frame->format = AV_PIX_FMT_NV12; // NV12 format
+    frame->width = width;
+    frame->height = height;
+
+    // Allocate buffer for the image data
+    int ret = av_frame_get_buffer(frame, 1); // 1 is the alignment requirement; can be adjusted as needed
+    if (ret < 0) {
+        fprintf(stderr, "Could not allocate frame data\n");
+        av_frame_free(&frame);
+        return NULL;
+    }
+
+    // Assuming the data in buffer is in the order of Y, U, V (YUV 420P format)
+    int y_plane_size = width * height;
+    int uv_plane_size = (width / 2) * (height / 2);
+
+    // Copy Y plane data
+    memcpy(frame->data[0], buffer, y_plane_size);
+
+    // Prepare UV plane data in NV12 format
+    uint8_t *uv_plane = frame->data[1];
+    for (int h = 0; h < height / 2; h++) {
+        for (int w = 0; w < width / 2; w++) {
+            // U and V values are interleaved in NV12 format
+            uv_plane[2 * (h * (width / 2) + w)] = buffer[y_plane_size + (h * (width / 2) + w)];        // U
+            uv_plane[2 * (h * (width / 2) + w) + 1] = buffer[y_plane_size + uv_plane_size + (h * (width / 2) + w)]; // V
+        }
+    }
+
+    // Set timestamp information (optional, depending on use case)
+    frame->pts = 0;  // Set the presentation timestamp (PTS) for the frame
+
+    return frame;
+}
+
 static void install_baseenc_yuv420p_recon(AVFrame *frame,uint8_t *buffer) {
     int y_plane_size = frame->width * frame->height;
     int uv_plane_size = (frame->width / 2) * (frame->height / 2);
@@ -130,7 +157,12 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
         AVCodecContext *enc_ctx = p_base_ctx->baseenc_ctx; 
         AVCodecContext *dec_ctx = p_base_ctx->basedec_ctx; 
 
-        AVFrame *frame = create_baseenc_yuv420p_frame(yuv,w,h);
+        AVFrame *frame;
+#ifdef __Xilinx_ZCU106__
+        frame = create_baseenc_nv12_frame(yuv,w,h);
+#else
+        frame = create_baseenc_yuv420p_frame(yuv,w,h);
+#endif
         
         ret = avcodec_send_frame((AVCodecContext*)enc_ctx, frame);
         if (ret < 0) {
@@ -151,7 +183,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
             if (pkt->size > 0) {
                 memcpy(str, pkt->data, pkt->size); // Copy packet data to str
                 *str_len = pkt->size;              // Set str_len to the size of the packet
-#if 0
+#if 1
                 static FILE *base_bin_fp;
                 if(!base_bin_fp) base_bin_fp = fopen("testout/base_str.bin","wb");
                 if(base_bin_fp){
@@ -176,6 +208,14 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
             }
 
             install_baseenc_yuv420p_recon(decoded_frame,recon);
+#if 1
+            static FILE *base_recon_fp;
+            if(!base_recon_fp) base_recon_fp = fopen("testout/base_recon.yuv","wb");
+            if(base_recon_fp){
+                fwrite(recon, 1, decoded_frame->height*decoded_frame->linesize[0]*3/2 , base_recon_fp);
+                fflush(base_recon_fp);
+            }
+#endif
 
             //memcpy(recon, decoded_frame->data[0], decoded_frame->linesize[0] * decoded_frame->height); // Y
             //memcpy(recon + decoded_frame->linesize[0] * decoded_frame->height, decoded_frame->data[1], decoded_frame->linesize[1]); // U
@@ -199,6 +239,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
 
 static av_cold int __lbvc_init(AVCodecContext *avctx) {
     enum AVCodecID base_codec_id;
+    AVCodec *baseenc_codec;
 
     av_log(avctx, AV_LOG_DEBUG,"__lbvc_init enter! \n");
     LowBitrateEncoderContext *ctx = avctx->priv_data;
@@ -222,12 +263,21 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
             
     //alloc
     base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(ctx->base_codec);
-    
-    AVCodec *baseenc_codec = avcodec_find_encoder(base_codec_id);
+
+#ifdef __Xilinx_ZCU106__
+    //zcu106 use hw codec by openmax
+    if(base_codec_id == AV_CODEC_ID_H264){
+        baseenc_codec = avcodec_find_encoder_by_name("h264_omx");
+    }else{
+        av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
+        return AVERROR_UNKNOWN;
+    }
+#else
+    baseenc_codec = avcodec_find_encoder(base_codec_id);
     if (!baseenc_codec) {
         return AVERROR_UNKNOWN;
     }
-
+#endif
     ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
     if (!ctx->baseenc_ctx) {
         return AVERROR(ENOMEM);
@@ -266,7 +316,11 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
     ctx->baseenc_ctx->time_base = (AVRational){1, 25};
     //ctx->baseenc_ctx->gop_size = 10;
     //ctx->baseenc_ctx->max_b_frames = 1;
+#ifdef __Xilinx_ZCU106__
+    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_NV12;
+#else
     ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+#endif
 
     av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init avcodec_open2 start. \n");
     AVDictionary *opts = NULL;
@@ -287,16 +341,6 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
         return AVERROR_UNKNOWN;
     }
 
-#if 0//def hw_vcu
-    //baseenc
-    vcu_ffmpeg_init();
-
-    AL_ELibEncoderArch eArch = AL_LIB_ENCODER_ARCH_HOST;
-    if(AL_Lib_Encoder_Init(eArch) != AL_SUCCESS){
-        av_log(avctx, AV_LOG_DEBUG,"error AL_Lib_Encoder_Init\n");
-        return -1;
-    }
-#endif
     return 0;
 }
 
