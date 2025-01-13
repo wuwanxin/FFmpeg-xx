@@ -159,13 +159,19 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     if (ret < 0)
         return ret;
 
-    ret = av_new_packet(out, in->size + 1024);
+    ret = av_new_packet(out, in->size + 4096);
     if (ret < 0)
         goto fail;
 
     
     //AVPacketSideData *side_data = av_packet_new_side_data(out,AV_PKT_DATA_SEI,in->size);
-    
+    //debug
+#if 0
+    static FILE *fp_in = NULL;
+    if(!fp_in) fp_in = fopen("check_bsf_in.bin","w");
+    if(fp_in) fwrite(in->data,1,in->size,fp_in);
+    fflush(fp_in);
+#endif
     bytestream2_init(&gb, in->data, in->size);
     bytestream2_init_writer(&pb, out->data, out->size);
 
@@ -203,7 +209,7 @@ second_field:
             bytestream2_put_byte(&pb, 0x06);
         }
         bytestream2_put_byte(&pb, 0xCD);
-        //write size for hevc sei
+        //write size for sei
         av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size); 
         while(write_total_size >= 0xFF){
             bytestream2_put_byte(&pb,0xFF);
@@ -213,12 +219,23 @@ second_field:
         bytestream2_put_byte(&pb,write_total_size);
         av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size);
     }else if(type == 0x10){ 
+        int roi_x = 0;
+        int roi_y = 0;
+        int size2 = 0;
         bytestream2_put_byte(&pb, 0xE0);
         bytestream2_put_be32(&pb, size);
-        bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi x
-        bytestream2_put_be32(&pb, bytestream2_get_be32(&gb));// roi y
+        roi_x = bytestream2_get_be32(&gb);
+        roi_y = bytestream2_get_be32(&gb);
+        bytestream2_put_be32(&pb, roi_x);// roi x
+        bytestream2_put_be32(&pb, roi_y);// roi y
+        av_log(ctx, AV_LOG_DEBUG,"get layer1 roi pos:(%d,%d) size:%d\n",roi_x,roi_y,size);
         modify_bytestream(gb,0,size);
-        bytestream2_copy_buffer(&pb, &gb, size);
+        size2 = bytestream2_copy_buffer(&pb, &gb, size);
+        if(size2 != size ){
+            av_log(ctx, AV_LOG_ERROR,"error happened. 111\n");
+            int loop = 1000000000000000000000000000;
+            while(loop) loop--;;
+        }
     }else if(type == 0x11){
         //enhance layer2
         bytestream2_put_byte(&pb, 0xE1);

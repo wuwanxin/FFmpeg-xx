@@ -35,7 +35,7 @@ enum AVCodecID lbvenc_common_trans_internal_base_codecid_to_codecid(int internal
     switch(internal_id){
         case 0:
             base_codec_id = AV_CODEC_ID_H264;
-            printf("AV_CODEC_ID_H264 AV_CODEC_ID_H264 \n");
+            //printf("base codec:  AV_CODEC_ID_H264 \n");
             break;
         case 1:
             base_codec_id = AV_CODEC_ID_HEVC;

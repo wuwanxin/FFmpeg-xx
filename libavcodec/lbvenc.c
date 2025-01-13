@@ -421,6 +421,9 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
 #endif
             sevc_encode_push_one_frame(tmp->data[0],tmp->data[1],tmp->data[2]);
             break;
+        default:
+            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame not support yuv format .(%d) \n",frame->format);
+            return -1;
     }
 
     av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame start\n");
@@ -462,7 +465,7 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: base size-%d\n",out.base_size);
 
         //enhance size and header
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 size-%d layer2 size-%d \n",out.enlayer1_size,out.enlayer2_size);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 size-(%d) layer2 size-(%d) \n",out.enlayer1_size,out.enlayer2_size);
         bytestream2_put_be32(&pb, out.enlayer1_size+out.enlayer2_size);
         bytestream2_put_byte(&pb, 0x01);
         
@@ -479,6 +482,8 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
         bytestream2_put_be32(&pb, out.enlayer2_size);
         bytestream2_put_byte(&pb, 0x11);
         bytestream2_put_buffer(&pb,out.enlayer2_buf,out.enlayer2_size);
+        
+        
         sevc_encode_free_output_frame(&out);
         pkt->size = bytestream2_tell_p(&pb);
         //av_image_copy(pkt->data,pkt->size);
