@@ -138,14 +138,26 @@ static int frame_process_video(AVFilterContext *ctx,AVFrame *dst, const AVFrame 
     for (i = 0; i < desc->nb_components; i++)
         planes_nb = FFMAX(planes_nb, desc->comp[i].plane + 1);
 
-    if(planes_nb < 3) return AVERROR(EINVAL);;//now only support 3plane yuv420p
+    if(planes_nb < 3){
+        av_log(ctx, AV_LOG_ERROR,"now only support 3plane yuv420p, but (%d) \n",planes_nb);
+        return AVERROR(EINVAL);//now only support 3plane yuv420p
+    } 
 
     //printf("frame_process_video planes_nb:%d \n",planes_nb);
 
     dec_param.data_in_luma = src->data[0];
     dec_param.data_in_chroma_u = src->data[1];
     dec_param.data_in_chroma_v = src->data[2];
-
+#if 0
+    static FILE *fp = NULL;
+    if(!fp) fp = fopen("testout/check_vflbdec_src.yuv","wb");
+    if(fp){ 
+        fwrite(dec_param.data_in_luma, 1, src->width * src->height  , fp);
+        fwrite(dec_param.data_in_chroma_u, 1, src->width * src->height / 4 , fp);
+        fwrite(dec_param.data_in_chroma_v, 1, src->width * src->height / 4 , fp);
+    }
+    
+#endif
     dec_param.data_out_luma = dst->data[0];
     dec_param.data_out_chroma_u = dst->data[1];
     dec_param.data_out_chroma_v = dst->data[2];

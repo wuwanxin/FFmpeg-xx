@@ -35,7 +35,7 @@ static av_cold int init(AVBSFContext *ctx)
     
     switch(ctx->par_in->codec_id){
         case AV_CODEC_ID_LBVC:
-            ctx->par_out->codec_id = AV_CODEC_ID_NUHD_NORMAL_H264;
+            ctx->par_out->codec_id = AV_CODEC_ID_H264;//AV_CODEC_ID_NUHD_NORMAL_H264;
             break;
         case AV_CODEC_ID_LBVC_HEVC:
         case AV_CODEC_ID_HLBVC:
