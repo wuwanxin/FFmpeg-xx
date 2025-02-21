@@ -159,7 +159,7 @@ static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
     if (ret < 0)
         return ret;
 
-    ret = av_new_packet(out, in->size + 4096);
+    ret = av_new_packet(out, in->size + 32768);
     if (ret < 0)
         goto fail;
 
