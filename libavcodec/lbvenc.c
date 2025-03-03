@@ -460,7 +460,7 @@ once:
             av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame not support yuv format .(%d) \n",frame->format);
             return -1;
     }
-
+sevc_encode_once:
     av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame start\n");
     ret = sevc_encode_one_frame();
     av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame down\n");
@@ -548,6 +548,10 @@ once:
             av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT goto once.(%d) \n",ret);
             goto once;
         } 
+        else  if(ret == SEVC_ERRORCODE_RECON_WAIT){
+            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame SEVC_ERRORCODE_RECON_WAIT goto sevc_encode_once.(%d) \n",ret);
+            goto sevc_encode_once;
+        }
     }
     return 0;
 }
