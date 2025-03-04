@@ -71,7 +71,6 @@ static void modify_normal_bytestream_to_nuhd(GetByteContext gb,int start,int siz
             i += 4;
         }
 
-#if 1
         else if (i <= (size - 3) && (AV_RB24(pos + i) == 0xFFFEFD)) {
             
             //av_log(logctx, AV_LOG_DEBUG,"pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
@@ -81,7 +80,17 @@ static void modify_normal_bytestream_to_nuhd(GetByteContext gb,int start,int siz
             size += 2; 
             i += 3; 
         }
-#endif
+
+        else if (i <= (size - 3) && (AV_RB24(pos + i) == 0xFFFEFE)) {
+            
+            //av_log(logctx, AV_LOG_DEBUG,"pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
+            *(pos + i) = repl2[1];
+            *(pos + i + 1) = repl2[2];
+            *(pos + i + 2) = repl2[2];
+            size += 2; 
+            i += 3; 
+        }
+
         else {
 #if 0 //debug code
             static FILE *debug_log = NULL;
@@ -104,13 +113,24 @@ int lbvenc_enhance_data_decode(H2645SEILbvencEnhanceData *s,GetByteContext *gb,v
     uint8_t *buffer = NULL;
     int roi_x;
     int roi_y;
+    int skip;
     
     lbvenc_enhance_type = bytestream2_get_byte(gb);
     av_log(logctx, AV_LOG_DEBUG,"decode_nal_sei_decoded_nuhd_lbvenc_enhance_data enter.\n");
     if (lbvenc_enhance_type == 0xE0) {
         size = bytestream2_get_be32(gb);
-        roi_x = bytestream2_get_be32(gb);
-        roi_y = bytestream2_get_be32(gb);
+        roi_x = bytestream2_get_be16(gb);
+        skip = bytestream2_get_be16(gb); // skip
+        if(skip != 0xFFFE){
+            av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data_decode error happened...\n");
+            return -1;
+        }
+        roi_y = bytestream2_get_be16(gb);
+        skip = bytestream2_get_be16(gb); // skip
+        if(skip != 0xFFFE){
+            av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data_decode error happened...\n");
+            return -1;
+        }
         av_log(logctx, AV_LOG_DEBUG,"lbvenc_enhance_data layer1 data...size=%d roi(%d,%d)\n",size,roi_x,roi_y);
         modify_normal_bytestream_to_nuhd(*gb,0,size);
         buffer = (uint8_t *)malloc(sizeof(uint8_t) * size);

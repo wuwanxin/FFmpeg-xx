@@ -29,6 +29,7 @@
 #include "bsf_internal.h"
 #include "bytestream.h"
 #include "lbvenc.h"
+#include "libavutil/time.h"
 
 static av_cold int init(AVBSFContext *ctx)
 {
@@ -44,42 +45,6 @@ static av_cold int init(AVBSFContext *ctx)
     }
     
     return 0;
-}
-
-static void modify_buffer(uint8_t *buf, size_t size) {
-    
-    const uint8_t seq1[] = {0x00, 0x00, 0x01};
-    const uint8_t seq2[] = {0x00, 0x00, 0x00, 0x01};
-    const uint8_t repl1[] = {0xFF, 0xFE, 0xFD};
-    const uint8_t repl2[] = {0xFF, 0xFE, 0xFD, 0xFC};
-
-    size_t i = 0;
-    while (i < size) {
-        
-        if (i <= (size - 4) && (AV_RB32(buf + i) == 0x00000001)) {
-            
-            //memmove(buf + i + 4, buf + i + 4 - 1, size - (i + 4)); 
-            *(buf + i) = repl2[0];
-            *(buf + i + 1) = repl2[1];
-            *(buf + i + 2) = repl2[2];
-            *(buf + i + 3) = repl2[3];
-            size += 3; 
-            i += 4;
-        }
-#if 0
-        else if (i <= size - 3 && memcmp(buf + i, seq1, 3) == 0) {
-            
-            memmove(buf + i + 3, buf + i + 3 - 1, size - (i + 3));
-            memcpy(buf + i, repl1, 3);
-            size += 2; 
-            i += 3; 
-        }
-#endif
-        else {
-            i++;
-        }
-
-    }
 }
 
 static void modify_bytestream(GetByteContext gb,int start,int size) {
@@ -104,7 +69,6 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
             i += 4;
         }
 
-#if 1
         else if (i <= (size - 3) && (AV_RB24(pos + i) == 0x000001)) {
             
             //printf("pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
@@ -114,7 +78,19 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
             size += 2; 
             i += 3; 
         }
-#endif
+
+        else if (i <= (size - 3) && (AV_RB24(pos + i) == 0x000000)) {
+            
+            printf("pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
+            //av_usleep(1000000);
+            *(pos + i) = repl2[0];
+            *(pos + i + 1) = repl2[1];
+            *(pos + i + 2) = repl2[1];
+            printf("output pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
+            size += 2; 
+            i += 3; 
+        }
+
         else {
 #if 0 //debug code
             static FILE *debug_log = NULL;
@@ -189,72 +165,74 @@ second_field:
     bytestream2_skip(&gb, 4);
     bytestream2_skip(&gb, 1);
     av_log(ctx, AV_LOG_DEBUG,"111type:0x%02x (0x%08x) size=%d\n",type,bytestream2_tell_p(&gb),size);
-    
- 
-    if(type == 0x0){
-        //base layer
-        bytestream2_copy_buffer(&pb, &gb, size);
-    }else if(type == 0x01){
-        //enhance size
-        write_total_size = (size+5+4+4);//+13 bytes: 4 bytes size , 1 byte type ,4 bytes roi pos x,,4 bytes roi pos y
-        //write sei header
-        bytestream2_put_byte(&pb, 0x00);
-        bytestream2_put_byte(&pb, 0x00);
-        bytestream2_put_byte(&pb, 0x00);
-        bytestream2_put_byte(&pb, 0x01);
-        if(base_codec_id == AV_CODEC_ID_HEVC){
-            bytestream2_put_byte(&pb, 0x50);
-            bytestream2_put_byte(&pb, 0x01);
-        }else if(base_codec_id == AV_CODEC_ID_H264){
-            bytestream2_put_byte(&pb, 0x06);
-        }
-        bytestream2_put_byte(&pb, 0xCD);
-        //write size for sei
-        av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size); 
-        while(write_total_size >= 0xFF){
-            bytestream2_put_byte(&pb,0xFF);
-            write_total_size -= 0xFF;
-            //av_log(ctx, AV_LOG_DEBUG,"write 0xFF(%d) \n",write_total_size);
-        }
-        bytestream2_put_byte(&pb,write_total_size);
-        av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size);
-    }else if(type == 0x10){ 
-        int roi_x = 0;
-        int roi_y = 0;
-        int size2 = 0;
-        bytestream2_put_byte(&pb, 0xE0);
-        bytestream2_put_be32(&pb, size);
-        roi_x = bytestream2_get_be32(&gb);
-        roi_y = bytestream2_get_be32(&gb);
-        bytestream2_put_be32(&pb, roi_x);// roi x
-        bytestream2_put_be32(&pb, roi_y);// roi y
-        av_log(ctx, AV_LOG_DEBUG,"get layer1 roi pos:(%d,%d) size:%d\n",roi_x,roi_y,size);
-        modify_bytestream(gb,0,size);
-        size2 = bytestream2_copy_buffer(&pb, &gb, size);
-        if(size2 != size ){
-            av_log(ctx, AV_LOG_ERROR,"error happened. 111\n");
-            int loop = 1000000000000000000000000000;
-            while(loop) loop--;;
-        }
-    }else if(type == 0x11){
-        //enhance layer2
-        bytestream2_put_byte(&pb, 0xE1);
-        bytestream2_put_be32(&pb, size);
-        if(size > 0){
-            modify_bytestream(gb,0,size);
+    if(size < 0){
+        av_log(ctx, AV_LOG_DEBUG,"[warning]size(%d) <= 0 , drop it...\n",size);
+    }else{ 
+        if(type == 0x0){
+            //base layer
             bytestream2_copy_buffer(&pb, &gb, size);
+        }else if(type == 0x01){
+            //enhance size
+            write_total_size = (size+5+4+4);//+13 bytes: 4 bytes size , 1 byte type ,4 bytes roi pos x,,4 bytes roi pos y
+            //write sei header
+            bytestream2_put_byte(&pb, 0x00);
+            bytestream2_put_byte(&pb, 0x00);
+            bytestream2_put_byte(&pb, 0x00);
+            bytestream2_put_byte(&pb, 0x01);
+            if(base_codec_id == AV_CODEC_ID_HEVC){
+                bytestream2_put_byte(&pb, 0x50);
+                bytestream2_put_byte(&pb, 0x01);
+            }else if(base_codec_id == AV_CODEC_ID_H264){
+                bytestream2_put_byte(&pb, 0x06);
+            }
+            bytestream2_put_byte(&pb, 0xCD);
+            //write size for sei
+            av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size); 
+            while(write_total_size >= 0xFF){
+                bytestream2_put_byte(&pb,0xFF);
+                write_total_size -= 0xFF;
+                //av_log(ctx, AV_LOG_DEBUG,"write 0xFF(%d) \n",write_total_size);
+            }
+            bytestream2_put_byte(&pb,write_total_size);
+            av_log(ctx, AV_LOG_DEBUG,"write 0x%02x(%d) \n",write_total_size,write_total_size);
+        }else if(type == 0x10){ 
+            int roi_x = 0;
+            int roi_y = 0;
+            int size2 = 0;
+            bytestream2_put_byte(&pb, 0xE0);
+            bytestream2_put_be32(&pb, size);
+            roi_x = bytestream2_get_be32(&gb);
+            roi_y = bytestream2_get_be32(&gb);
+            bytestream2_put_be16(&pb, roi_x);// roi x
+            bytestream2_put_be16(&pb, 0xFFFE);// skip flag,to avoid roi_x is 0
+            bytestream2_put_be16(&pb, roi_y);// roi y
+            bytestream2_put_be16(&pb, 0xFFFE);// skip flag,to avoid roi_y is 0
+            av_log(ctx, AV_LOG_DEBUG,"get layer1 roi pos:(%d,%d) size:%d\n",roi_x,roi_y,size);
+            modify_bytestream(gb,0,size);
+            size2 = bytestream2_copy_buffer(&pb, &gb, size);
+            if(size2 != size ){
+                av_log(ctx, AV_LOG_ERROR,"error happened. 111\n");
+                int loop = 1000000000000000000000000000;
+                while(loop) loop--;;
+            }
+        }else if(type == 0x11){
+            //enhance layer2
+            bytestream2_put_byte(&pb, 0xE1);
+            bytestream2_put_be32(&pb, size);
+            if(size > 0){
+                modify_bytestream(gb,0,size);
+                bytestream2_copy_buffer(&pb, &gb, size);
+            }
+        }else{
+            av_log(ctx, AV_LOG_ERROR,"error happened.\n");
+            av_usleep(1000000 * 10);
+        } 
+        
+        end = bytestream2_tell_p(&gb);
+        av_log(ctx, AV_LOG_DEBUG,"end:0x%08x (0x%08x) \n",end,in->size);
+        if( (in->size - end) > 0 ){
+            goto second_field;
         }
-    }else{
-        av_log(ctx, AV_LOG_ERROR,"error happened.\n");
-        int loop = 1000000000000000000000000000;
-        while(loop) loop--;;
-    } 
-    
-    
-    end = bytestream2_tell_p(&gb);
-    av_log(ctx, AV_LOG_DEBUG,"end:0x%08x (0x%08x) \n",end,in->size);
-    if( (in->size - end) > 0 ){
-        goto second_field;
     }
     
 
