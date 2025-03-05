@@ -134,21 +134,34 @@ static AVFrame* create_baseenc_nv12_frame(uint8_t *buffer, int width, int height
     return frame;
 }
 
-static void install_baseenc_yuv420p_recon(AVFrame *frame,uint8_t *buffer) {
-    int y_plane_size = frame->width * frame->height;
-    int uv_plane_size = (frame->width / 2) * (frame->height / 2);
+static void install_baseenc_yuv420p_recon(AVFrame *frame, uint8_t *buffer) {
+    int y_width = frame->width;
+    int y_height = frame->height;
+    int y_size = y_width * y_height;
+    
+    int uv_width = y_width / 2;
+    int uv_height = y_height / 2;
+    int uv_size = uv_width * uv_height;
 
-    // Copy Y plane data
-    memcpy(buffer,frame->data[0], y_plane_size);
+    uint8_t *dst = buffer;
 
-    // Copy U plane data
-    memcpy(buffer + y_plane_size,frame->data[1], uv_plane_size);
+    // 拷贝Y平面
+    for (int i = 0; i < y_height; i++, dst += y_width) {
+        memcpy(dst, frame->data[0] + i * frame->linesize[0], y_width);
+    }
 
-    // Copy V plane data
-    memcpy(buffer + y_plane_size + uv_plane_size,frame->data[2], uv_plane_size);
+    // 拷贝U平面
+    uint8_t *u_src = frame->data[1];
+    for (int i = 0; i < uv_height; i++, dst += uv_width) {
+        memcpy(dst, u_src + i * frame->linesize[1], uv_width);
+    }
 
+    // 拷贝V平面
+    uint8_t *v_src = frame->data[2];
+    for (int i = 0; i < uv_height; i++, dst += uv_width) {
+        memcpy(dst, v_src + i * frame->linesize[2], uv_width);
+    }
 }
-
 
 static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int flag){
 
@@ -236,7 +249,8 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
                 static FILE *base_recon_fp;
                 if(!base_recon_fp) base_recon_fp = fopen("testout/base_recon.yuv","wb");
                 if(base_recon_fp){
-                    fwrite(recon, 1, decoded_frame->height*decoded_frame->linesize[0]*3/2 , base_recon_fp);
+                    int yuv_size = decoded_frame->width * decoded_frame->height * 3 / 2;
+                    fwrite(recon, 1, yuv_size , base_recon_fp);
                     fflush(base_recon_fp);
                 }
 #endif
