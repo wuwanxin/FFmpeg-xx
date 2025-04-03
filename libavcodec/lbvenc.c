@@ -134,7 +134,7 @@ static AVFrame* create_baseenc_nv12_frame(uint8_t *buffer, int width, int height
     return frame;
 }
 
-static void install_baseenc_yuv420p_recon(AVFrame *frame, uint8_t *buffer) {
+static void install_baseenc_yuv420p_recon(AVFrame *frame,uint8_t *buffer) {
     int y_width = frame->width;
     int y_height = frame->height;
     int y_size = y_width * y_height;
@@ -145,23 +145,24 @@ static void install_baseenc_yuv420p_recon(AVFrame *frame, uint8_t *buffer) {
 
     uint8_t *dst = buffer;
 
-    // 拷贝Y平面
-    for (int i = 0; i < y_height; i++, dst += y_width) {
+    // Copy Y plane data
+	for (int i = 0; i < y_height; i++, dst += y_width) {
         memcpy(dst, frame->data[0] + i * frame->linesize[0], y_width);
     }
 
-    // 拷贝U平面
-    uint8_t *u_src = frame->data[1];
+    // Copy U plane data
+	uint8_t *u_src = frame->data[1];
     for (int i = 0; i < uv_height; i++, dst += uv_width) {
         memcpy(dst, u_src + i * frame->linesize[1], uv_width);
     }
-
-    // 拷贝V平面
+    // Copy V plane data
     uint8_t *v_src = frame->data[2];
     for (int i = 0; i < uv_height; i++, dst += uv_width) {
         memcpy(dst, v_src + i * frame->linesize[2], uv_width);
     }
+
 }
+
 
 static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  unsigned char *recon,int w,int h,unsigned char *str,int *str_len,int flag){
 
@@ -196,7 +197,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
     }
 
     if((flag >= 1) && recon){
-        printf( "baseenc try to get recon and str.. \n");
+        //printf( "baseenc try to get recon and str.. \n");
         //only receive frame
         // Create a new AVPacket
 
@@ -213,7 +214,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
                 //printf("!data generated! (size %d)\n",pkt->size);
                 memcpy(str, pkt->data, pkt->size); // Copy packet data to str
                 *str_len = pkt->size;              // Set str_len to the size of the packet
-            #if 1
+#if 0
                 static FILE *base_bin_fp;
                 if(!base_bin_fp) base_bin_fp = fopen("testout/base_str.bin","wb");
                 if(base_bin_fp){
@@ -221,7 +222,7 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
                     fflush(base_bin_fp);
                 }
                 //sleep(10);
-            #endif
+#endif
                 pkt->stream_index = 0; // Set the stream index to video
 
                 if(dec_ctx){
@@ -245,12 +246,11 @@ static int __base_encode_callback_function(void *basectx, unsigned char *yuv,  u
                 
                 install_baseenc_yuv420p_recon(decoded_frame,recon);
         
-#if 1
+#if 0
                 static FILE *base_recon_fp;
                 if(!base_recon_fp) base_recon_fp = fopen("testout/base_recon.yuv","wb");
                 if(base_recon_fp){
-                    int yuv_size = decoded_frame->width * decoded_frame->height * 3 / 2;
-                    fwrite(recon, 1, yuv_size , base_recon_fp);
+                    fwrite(recon, 1, decoded_frame->height*decoded_frame->linesize[0]*3/2 , base_recon_fp);
                     fflush(base_recon_fp);
                 }
 #endif
@@ -410,21 +410,22 @@ static av_cold int hlbvc_init(AVCodecContext *avctx){
 }
 
 static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
-                             const AVFrame *frame, int *got_packet) {
+    const AVFrame *frame, int *got_packet) {
     LowBitrateEncoderContext *ctx = avctx->priv_data;
     AVFrame *tmp;
     int ret = -1;
     SEVC_ERRORCODE src_push_retcode; 
-    PutByteContext pb;
-    PutByteContext pb_base;
-    SEVC_BASEENC_OUTPUT_FRAME out;
+
+    int file_size = 0;
+
+
     if(!frame){
         *got_packet = 0;
         return 0;
     }
 once:
-    int file_size = 0;
-    //av_log(avctx, AV_LOG_DEBUG,"new frame lbvc_encode \n");
+    file_size = 0;
+
     tmp = av_frame_alloc();
     if(!tmp){
         av_log(avctx, AV_LOG_DEBUG,"av_frame_alloc error. \n");
@@ -440,7 +441,6 @@ once:
         av_log(avctx, AV_LOG_DEBUG,"av_frame_copy error. \n");
         return ret;
     }
-
 
     av_log(avctx, AV_LOG_DEBUG,"==============>lbvc_encode<============== \n");
     av_log(avctx, AV_LOG_DEBUG,"width :%d \n",tmp->width);
@@ -458,116 +458,66 @@ once:
 
     switch(frame->format){
         case AV_PIX_FMT_YUV420P:
-#if 0
-            static FILE *fp;
-            if(!fp) fp = fopen("testout/ffmpeg_yuv_in.yuv","wb");
-            if(fp){
-                fwrite(tmp->data[0], 1, avctx->coded_width * avctx->coded_height  , fp);
-                fwrite(tmp->data[1], 1, avctx->coded_width * avctx->coded_height / 4 , fp);
-                fwrite(tmp->data[2], 1, avctx->coded_width * avctx->coded_height / 4 , fp);
-                fflush(fp);
+            src_push_retcode = sevc_encode_push_one_yuv420p_frame(tmp->data[0],tmp->linesize[0]*tmp->height,
+                                                                    tmp->data[1],tmp->linesize[1]*tmp->height/2,
+                                                                    tmp->data[2],tmp->linesize[2]*tmp->height/2);
+            if(src_push_retcode == SEVC_ERRORCODE_INPUT_ERROR){
+                av_log(avctx, AV_LOG_ERROR,"sevc_encode_push_one_yuv420p_frame error.\n");
+                goto err;
             }
-#endif
-            src_push_retcode = sevc_encode_push_one_frame(tmp->data[0],tmp->data[1],tmp->data[2]);
             break;
         default:
-            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame not support yuv format .(%d) \n",frame->format);
-            return -1;
+            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame_and_get_result not support yuv format .(%d) \n",frame->format);
+            goto err;
     }
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_push_one_yuv420p_frame retcode .(%d) \n",src_push_retcode);
 sevc_encode_once:
-    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame start\n");
-    ret = sevc_encode_one_frame();
-    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame down\n");
-
-    if(ret == SEVC_ERRORCODE_NONE_ERROR){
-        
-        
-        
-        sevc_encode_new_output_frame(&out);
-        sevc_encode_get_frame(&out);
-
-        // FILE* fp_bin = NULL;
-        //base
-        // fp_bin = fopen("./str.bin", "rb");
-        // fseek(fp_bin, 0, SEEK_END);
-        // file_size = ftell(fp_bin);
-        // rewind(fp_bin);
-        // unsigned char *base_tmp_buf = (unsigned char *)malloc(file_size);
-        // fread(base_tmp_buf, 1, file_size , fp_bin);
-        // fclose(fp_bin);
-        // out.base_size = file_size;
-    
-        ret = av_new_packet(pkt , out.base_size + out.enlayer1_size + out.enlayer2_size  + 1024*100);
-        if(ret < 0){
-            av_log(avctx, AV_LOG_DEBUG,"av_new_packet error\n");
-            return ret;
-        }
-        av_log(avctx, AV_LOG_DEBUG,"lbvenc packet size:%d \n",pkt->size);
-
-        bytestream2_init_writer(&pb, pkt->data, pkt->size);
-        //top header
-        bytestream2_put_byte(&pb, ctx->base_codec);
-
-        //base
-        bytestream2_put_be32(&pb, out.base_size);
-        bytestream2_put_byte(&pb, 0x00);
-        bytestream2_put_buffer(&pb,out.base_buf,out.base_size);
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: base size-%d\n",out.base_size);
-
-        //enhance size and header
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 size-(%d) layer2 size-(%d) \n",out.enlayer1_size,out.enlayer2_size);
-        bytestream2_put_be32(&pb, out.enlayer1_size+out.enlayer2_size);
-        bytestream2_put_byte(&pb, 0x01);
-        
-         
-        //en1
-        bytestream2_put_be32(&pb, out.enlayer1_size);
-        bytestream2_put_byte(&pb, 0x10);
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_new_output_frame: layer1 position-[%d,%d] \n",out.enlayer1_roi_x,out.enlayer1_roi_y); //enhance position
-          
-        bytestream2_put_be32(&pb, out.enlayer1_roi_x);
-        bytestream2_put_be32(&pb, out.enlayer1_roi_y);
-        if(out.enlayer1_buf) {
-            bytestream2_put_buffer(&pb,out.enlayer1_buf,out.enlayer1_size);
-        }else{
-            av_log(avctx, AV_LOG_ERROR,"sevc_encode_new_output_frame: layer1 buffer can not be null \n"); //enhance position
-        }
-
-        //en2
-        if(out.enlayer1_buf && (out.enlayer2_size >0)) {
-            bytestream2_put_be32(&pb, out.enlayer2_size);
-            bytestream2_put_byte(&pb, 0x11);
-            bytestream2_put_buffer(&pb,out.enlayer2_buf,out.enlayer2_size);
-        }       
-        sevc_encode_free_output_frame(&out);
-        pkt->size = bytestream2_tell_p(&pb);
-        //av_image_copy(pkt->data,pkt->size);
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_get_frame size:%d\n",pkt->size);
-        *got_packet = 1;
-    }else if(ret == SEVC_ERRORCODE_RECON_WAIT){
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame wait.... \n");
-        *got_packet = 0;
-    }else{
-        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame error.(%d) \n",ret);
-        if(tmp) av_frame_free(&tmp);
-        *got_packet = 0;
+    //malloc pkt
+    ret = av_new_packet(pkt , 1920 * 1080);
+    if(ret < 0){
+        av_log(avctx, AV_LOG_DEBUG,"av_new_packet error\n");
         return ret;
     }
-
-    if(tmp) av_frame_free(&tmp);
-
-    if((src_push_retcode == SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT) || (ret == SEVC_ERRORCODE_RECON_WAIT)){
-        usleep(1000);
-        if(src_push_retcode == SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT){
-            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT goto once.(%d) \n",ret);
-            goto once;
-        } 
-        else  if(ret == SEVC_ERRORCODE_RECON_WAIT){
-            av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame SEVC_ERRORCODE_RECON_WAIT goto sevc_encode_once.(%d) \n",ret);
-            goto sevc_encode_once;
-        }
+    av_log(avctx, AV_LOG_DEBUG,"lbvenc packet size:%d \n",pkt->size);
+    //enc
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame_and_get_result start\n");
+    ret = sevc_encode_one_frame_and_get_result(pkt->data,&pkt->size);
+    switch(ret){
+        case SEVC_ERRORCODE_ENCODE_ERROR:
+            goto err;
+        case SEVC_ERRORCODE_RECON_WAIT:
+            *got_packet = 0;
+            break;
+        case SEVC_ERRORCODE_NONE_ERROR:
+            *got_packet = 1;
+            break;
     }
+    
+    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame_and_get_result down (%d) size (%d)\n",ret,pkt->size);
+
+sevc_encode_down:
+    if((src_push_retcode == SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT)){
+        av_usleep(1000);
+        av_log(avctx, AV_LOG_DEBUG,"sevc_encode_one_frame_and_get_result SEVC_ERRORCODE_BASEENC_SRC_SEND_WAIT goto once.(%d) \n",ret);
+        goto once;
+    }
+    
+    if(tmp) av_frame_free(&tmp);
+    //if(pkt) av_packet_free(&pkt);
     return 0;
+
+got_no_data:
+    av_log(avctx, AV_LOG_ERROR,"lbvc_encode got no data\n");
+    if(tmp) av_frame_free(&tmp);
+    //if(pkt) av_packet_free(&pkt);
+    *got_packet = 0;
+    return 0;
+err:    
+    av_log(avctx, AV_LOG_ERROR,"lbvc_encode error happened\n");
+    if(tmp) av_frame_free(&tmp);
+    //if(pkt) av_packet_free(&pkt);
+    return -1;
+    
 }
 
 static void lbvc_flush(AVCodecContext *avctx)

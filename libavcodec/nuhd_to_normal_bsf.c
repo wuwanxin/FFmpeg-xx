@@ -81,12 +81,12 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
 
         else if (i <= (size - 3) && (AV_RB24(pos + i) == 0x000000)) {
             
-            printf("pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
+            //printf("pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
             //av_usleep(1000000);
             *(pos + i) = repl2[0];
             *(pos + i + 1) = repl2[1];
             *(pos + i + 2) = repl2[1];
-            printf("output pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
+            //printf("output pos[%d]:0x%02x 0x%02x 0x%02x\n ",i,*(pos + i), *(pos + i + 1),*(pos + i + 2)); 
             size += 2; 
             i += 3; 
         }
