@@ -22,66 +22,116 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mediaass/sevc_enc.h>
+#include "e2e/e2e_enc.h"
 
 typedef struct {
     AVClass *class;
-    // 这里可以添加你的编码器需要的其他字段
-    int inited;
-    int bypass;
-} LowBitrateEncoderContext;
+    e2e_t* e2e_hanle;
+    e2e_init_t* config;
+} e2eEncoderContext;
+
 
 static av_cold int e2enc_init(AVCodecContext *avctx) {
+    e2e_init_t* config = NULL;
+    e2e_t* e2e_handle = NULL;
+    e2eEncoderContext* ctx = (e2eEncoderContext*)avctx->priv_data;
 
-    printf("e2enc_init enter! \n");
+    config = (e2e_init_t*)malloc(sizeof(e2e_init_t));
+    if(!config)
+    {
+        av_log(ctx, AV_LOG_ERROR, "e2enc_init config malloc failed!\n");
+        return -1;
+    }
+
+    config->width = avctx->width;
+    config->height = avctx->height;
+    config->format = 0;
+    config->gop_size = 1;
+    config->frames = 1;
+    config->quality = 8;
+
+
+    e2e_handle = e2e_encoder_init(config);
+    if(!e2e_handle)
+    {
+        av_log(ctx, AV_LOG_ERROR, "e2enc_init e2e_handle is NULL. \n");
+        return -1;
+    }
+
+    ctx->e2e_hanle = e2e_handle;
+    ctx->config = config;
+
     return 0;
 }
 
 static int e2enc_encode(AVCodecContext *avctx, AVPacket *pkt,
                              const AVFrame *frame, int *got_packet) {
-    LowBitrateEncoderContext *ctx = avctx->priv_data;
-    const char* filename = "e2e.bin";
-    FILE *file = fopen(filename, "rb");
-    if (!file) {
-        perror("Failed to open file");
-        return -1;  // 文件打开失败
+    
+    e2eEncoderContext *ctx = avctx->priv_data;
+    uint8_t* e2enc_idata;
+    int e2enc_idata_size;
+    int input_w = frame->width;
+    int input_h = frame->height;
+    
+    if(avctx->pix_fmt == AV_PIX_FMT_RGB24){
+        e2enc_idata_size = input_w*input_h*3;
+        e2enc_idata = (uint8_t*)malloc(e2enc_idata_size);
+        for(int i=0;i<input_h;i++)
+        {
+            memcpy(e2enc_idata+3*i*input_w,frame->data[0]+i*frame->linesize[0],input_w*3);
+        }
+    }
+    else{
+        av_log(ctx, AV_LOG_ERROR, "e2enc_encode input fmt e2e encoder is not support \n");
+        return -1;
     }
 
-    // 分配数据包，确保分配成功
-    int frame_size = 1024 * 1024 * 10; 
-    int ret = av_new_packet(pkt, frame_size);
-    if (ret < 0) {
-        fclose(file);
+    e2e_pic_t* pic_in = (e2e_pic_t*) malloc(sizeof(e2e_pic_t));
+    pic_in->data = e2enc_idata;
+    pic_in->data_size = e2enc_idata_size;
+
+    e2e_bitsteam_t* bit_stream_out = NULL;
+    if(ctx->e2e_hanle == NULL)
+    {
+        av_log(ctx, AV_LOG_ERROR, "e2enc_encode tx->e2e_hanle is NULL\n");
+        return -1;
+    }
+    int ret = e2e_encode(ctx->e2e_hanle,pic_in,&bit_stream_out);
+    if(ret!=0)
+    {
+        av_log(ctx, AV_LOG_ERROR, "e2enc_encode e2e_encode fail.\n");
+        return -1;
+    }
+
+    int pkt_size = bit_stream_out->bitstream_size;
+    ret = av_new_packet(pkt, pkt_size);
+    if(ret < 0)
+    {
+        av_log(ctx, AV_LOG_ERROR, "e2enc_encode av_new_packet fail.\n");
         return ret;  // 分配失败
     }
 
-    // 读取文件内容到数据包中
-    size_t bytesRead = fread(pkt->data, 1, frame_size, file);
-    if (bytesRead <= 0) {  // 检查读取是否成功
-        av_packet_unref(pkt);
-        fclose(file);
-        return (bytesRead < 0) ? -1 : 0;  // 读取失败或 EOF
-    }
-
-    // 设置有效数据大小
-    pkt->size = bytesRead;
+    pkt->data = bit_stream_out->bitstream;
+    pkt->size = bit_stream_out->bitstream_size;
     *got_packet = 1;  // 标记已成功生成数据包
-
-    // 关闭文件
-    fclose(file);
-    
+ 
     return 0;
 }
+
 
 static void e2enc_flush(AVCodecContext *avctx)
 {
-    printf("e2enc_flush enter! \n");
+    av_log(avctx, AV_LOG_DEBUG, "e2enc_flush enter.\n");
 }
 
 static av_cold int e2enc_close(AVCodecContext *avctx) {
-    LowBitrateEncoderContext *ctx = avctx->priv_data;
     // 清理编码器
-    return 0;
+    int ret = -1;
+    e2eEncoderContext* ctx = (e2eEncoderContext*)avctx->priv_data;
+    e2e_t* e2e_handle = ctx->e2e_hanle;
+    if(e2e_handle!=NULL)
+        ret = e2e_encoder_clean(e2e_handle);
+    return ret;
 }
 
 static const AVClass e2enc_class = {
@@ -99,29 +149,10 @@ static const FFCodecDefault e2enc_defaults[] = {
 
 
 static const enum AVPixelFormat pix_fmts_all[] = {
-    AV_PIX_FMT_YUV420P,
-    AV_PIX_FMT_YUVJ420P,
-    AV_PIX_FMT_YUV422P,
-    AV_PIX_FMT_YUVJ422P,
-    AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_YUVJ444P,
-    AV_PIX_FMT_NV12,
-    AV_PIX_FMT_NV16,
-#ifdef X264_CSP_NV21
-    AV_PIX_FMT_NV21,
-#endif
-    AV_PIX_FMT_YUV420P10,
-    AV_PIX_FMT_YUV422P10,
-    AV_PIX_FMT_YUV444P10,
-    AV_PIX_FMT_NV20,
-#ifdef X264_CSP_I400
-    AV_PIX_FMT_GRAY8,
-    AV_PIX_FMT_GRAY10,
-#endif
-    AV_PIX_FMT_NONE
+    AV_PIX_FMT_RGB24,     ///< packed RGB 8:8:8, 24bpp, RGBRGB...
 };
 
-FFCodec ff_e2enc_encoder = {
+const FFCodec ff_e2enc_encoder = {
     .p.name           = "e2enc",
     CODEC_LONG_NAME("End to End Video Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
@@ -129,13 +160,12 @@ FFCodec ff_e2enc_encoder = {
     .p.capabilities   = AV_CODEC_CAP_DR1 ,
     .p.priv_class     = &e2enc_class,
     .p.wrapper_name   = "e2enc",
-    .priv_data_size   = sizeof(LowBitrateEncoderContext),
+    .priv_data_size   = sizeof(e2eEncoderContext),
     .init             = e2enc_init,
     FF_CODEC_ENCODE_CB(e2enc_encode),
     .flush            = e2enc_flush,
     .close            = e2enc_close,
     .defaults         = e2enc_defaults,
     .p.pix_fmts       = pix_fmts_all,
-    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
-                      ,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS,
 };
