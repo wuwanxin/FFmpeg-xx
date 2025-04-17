@@ -70,7 +70,7 @@ static int e2edec_decode(AVCodecContext *avctx, AVFrame *pict,
     bit_stream_input->bitstream = buf;
     bit_stream_input->bitstream_size = buf_size;
 
-#if 1
+#if 0
     FILE *in_file = fopen("e2edecode_in.bin", "wb");
     if (in_file != NULL) {
         fwrite(bit_stream_input->bitstream, 1, bit_stream_input->bitstream_size, in_file);
@@ -97,7 +97,7 @@ static int e2edec_decode(AVCodecContext *avctx, AVFrame *pict,
         return AVERROR_INVALIDDATA;
     }
 
-#if 1
+#if 0
     const char *output_filename = "e2edecode_out.rgb";
     FILE *output_file = fopen(output_filename, "wb");
     if (output_file != NULL) {

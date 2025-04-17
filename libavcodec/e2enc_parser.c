@@ -59,7 +59,7 @@ static int e2enc_parse(AVCodecParserContext *s,
                 avctx->width = width;
                 avctx->height = height;
                 avctx->pix_fmt = AV_PIX_FMT_RGB24;
-                av_log(avctx, AV_LOG_DEBUG, "Parsed header: %dx%d\n", width, height);
+                av_log(avctx, AV_LOG_DEBUG, "Parsed header: %dx%d quality: %d \n", width, height ,quality);
                 p->header_parsed = 1;
             }
 
