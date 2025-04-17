@@ -43,8 +43,6 @@ typedef struct {
     int base_codec;
 
     // baseenc_ctx
-    AVCodecContext *baseenc_ctx; 
-    AVCodecContext *basedec_ctx; 
     BaseEncoderContext p_base_ctx;
 } LowBitrateEncoderContext;
 
@@ -278,7 +276,7 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
 
     av_log(avctx, AV_LOG_DEBUG,"__lbvc_init enter! \n");
     LowBitrateEncoderContext *ctx = avctx->priv_data;
-    // 初始化编码器
+    // init encoders
 
     ctx->bypass = 0;
     int bypass = ctx->bypass;
@@ -313,19 +311,21 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
         return AVERROR_UNKNOWN;
     }
 #endif
-    ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
-    if (!ctx->baseenc_ctx) {
+    AVCodecContext *baseenc_ctx; 
+    AVCodecContext *basedec_ctx; 
+    baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
+    if (!baseenc_ctx) {
         return AVERROR(ENOMEM);
     }
 
     AVCodec *basedec_codec = avcodec_find_decoder(base_codec_id);
-    ctx->basedec_ctx = avcodec_alloc_context3(basedec_codec);
-    if (!ctx->basedec_ctx) {
+    basedec_ctx = avcodec_alloc_context3(basedec_codec);
+    if (!basedec_ctx) {
         return AVERROR(ENOMEM);
     }
     
-    ctx->p_base_ctx.baseenc_ctx = ctx->baseenc_ctx;
-    ctx->p_base_ctx.basedec_ctx = ctx->basedec_ctx;
+    ctx->p_base_ctx.baseenc_ctx = baseenc_ctx;
+    ctx->p_base_ctx.basedec_ctx = basedec_ctx;
 
     //init sevc 
     SEVC_CONFIGURE get_cfg = {
@@ -351,40 +351,40 @@ static av_cold int __lbvc_init(AVCodecContext *avctx) {
     sevc_encode_get_codecparam(&baseenc_get_param);
     
     //init baseenc ctx
-    ctx->baseenc_ctx->bit_rate = 400000;
-    ctx->baseenc_ctx->width = baseenc_get_param.base_layer_enc_w;
-    ctx->baseenc_ctx->height = baseenc_get_param.base_layer_enc_h;
-    ctx->baseenc_ctx->time_base = (AVRational){1, 25};
-    ctx->baseenc_ctx->gop_size = 25;
-    ctx->baseenc_ctx->keyint_min = 25;
-    ctx->baseenc_ctx->slice_count = 1;
-    ctx->baseenc_ctx->refs = 1;
-    ctx->baseenc_ctx->has_b_frames = 0;
-    ctx->baseenc_ctx->max_b_frames = 0;
-    ctx->baseenc_ctx->thread_count = 1;
+    baseenc_ctx->bit_rate = 400000;
+    baseenc_ctx->width = baseenc_get_param.base_layer_enc_w;
+    baseenc_ctx->height = baseenc_get_param.base_layer_enc_h;
+    baseenc_ctx->time_base = (AVRational){1, 25};
+    baseenc_ctx->gop_size = 25;
+    baseenc_ctx->keyint_min = 25;
+    baseenc_ctx->slice_count = 1;
+    baseenc_ctx->refs = 1;
+    baseenc_ctx->has_b_frames = 0;
+    baseenc_ctx->max_b_frames = 0;
+    baseenc_ctx->thread_count = 1;
 #ifdef __Xilinx_ZCU106__
     ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_NV12;
 #else
-    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 #endif
-    av_opt_set(ctx->baseenc_ctx->priv_data,"slice_mode","1",0);
+    av_opt_set(baseenc_ctx->priv_data,"slice_mode","1",0);
 
-    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init avcodec_open2 start. \n");
+    av_log(avctx, AV_LOG_DEBUG,"__lbvc_init avcodec_open2 start. \n");
     AVDictionary *opts = NULL;
     av_dict_set(&opts, "preset", "fast", 0); 
     av_dict_set(&opts, "tune", "zerolatency", 0); 
 
-    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
-        avcodec_free_context(&ctx->baseenc_ctx);
+    if (avcodec_open2(baseenc_ctx, baseenc_codec, &opts) < 0) {
+        avcodec_free_context(&baseenc_ctx);
         return AVERROR_UNKNOWN;
     }
     av_dict_free(&opts);
-    av_log(avctx, AV_LOG_DEBUG,"sevc_encode_init avcodec_open2 down. \n");
+    av_log(avctx, AV_LOG_DEBUG,"__lbvc_init avcodec_open2 down. \n");
 
     //init basedec ctx
-    ctx->basedec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    if (avcodec_open2(ctx->basedec_ctx, basedec_codec, NULL) < 0) {
-        avcodec_free_context(&ctx->basedec_ctx);
+    basedec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    if (avcodec_open2(basedec_ctx, basedec_codec, NULL) < 0) {
+        avcodec_free_context(&basedec_ctx);
         return AVERROR_UNKNOWN;
     }
 
@@ -415,17 +415,11 @@ static int lbvc_encode(AVCodecContext *avctx, AVPacket *pkt,
     AVFrame *tmp;
     int ret = -1;
     SEVC_ERRORCODE src_push_retcode; 
-
-    int file_size = 0;
-
-
     if(!frame){
         *got_packet = 0;
         return 0;
     }
 once:
-    file_size = 0;
-
     tmp = av_frame_alloc();
     if(!tmp){
         av_log(avctx, AV_LOG_DEBUG,"av_frame_alloc error. \n");
