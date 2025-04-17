@@ -45,6 +45,9 @@ enum AVCodecID lbvenc_common_trans_internal_base_codecid_to_codecid(int internal
             base_codec_id = AV_CODEC_ID_E2ENC;
             //printf("AV_CODEC_ID_E2ENC AV_CODEC_ID_E2ENC \n");
             break;
+        default:
+            printf("id error:%d \n",internal_id);
+            return -1;
     }
     return base_codec_id;
 }
