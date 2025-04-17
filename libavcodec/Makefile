@@ -1140,6 +1140,7 @@ OBJS-$(CONFIG_LIBZVBI_TELETEXT_DECODER)   += libzvbi-teletextdec.o ass.o
 #CONFIG_LIBLBVC_ENCODER
 OBJS-$(CONFIG_LBVC_ENCODER)            += lbvenc.o lbvenc_common.o
 OBJS-$(CONFIG_E2ENC_ENCODER)            += e2enc.o
+OBJS-$(CONFIG_E2ENC_DECODER)            += e2edec.o
 
 # parsers
 OBJS-$(CONFIG_AAC_LATM_PARSER)         += latm_parser.o
@@ -1174,6 +1175,7 @@ OBJS-$(CONFIG_GSM_PARSER)              += gsm_parser.o
 OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
 OBJS-$(CONFIG_H263_PARSER)             += h263_parser.o
 OBJS-$(CONFIG_H264_PARSER)             += h264_parser.o h264data.o
+OBJS-$(CONFIG_E2ENC_PARSER)            += e2enc_parser.o
 OBJS-$(CONFIG_HEVC_PARSER)             += hevc_parser.o hevc_data.o
 OBJS-$(CONFIG_HDR_PARSER)              += hdr_parser.o
 OBJS-$(CONFIG_IPU_PARSER)              += ipu_parser.o

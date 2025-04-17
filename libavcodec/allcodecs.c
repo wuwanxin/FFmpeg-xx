@@ -812,6 +812,10 @@ extern const FFCodec ff_lbvc_hevc_encoder;
 extern const FFCodec ff_hlbvc_encoder;
 extern const FFCodec ff_e2enc_encoder;
 
+
+/* individual decoder */
+extern const FFCodec ff_e2enc_decoder;
+
 #if CONFIG_LIBX264_ENCODER
 #include <x264.h>
 #if X264_BUILD < 153

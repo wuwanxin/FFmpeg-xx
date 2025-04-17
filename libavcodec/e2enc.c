@@ -36,7 +36,7 @@ static av_cold int e2enc_init(AVCodecContext *avctx) {
     e2e_t* e2e_handle = NULL;
     e2eEncoderContext* ctx = (e2eEncoderContext*)avctx->priv_data;
 
-    config = (e2e_init_t*)malloc(sizeof(e2e_init_t));
+    config = av_malloc(sizeof(e2e_init_t));
     if(!config)
     {
         av_log(ctx, AV_LOG_ERROR, "e2enc_init config malloc failed!\n");
@@ -66,7 +66,8 @@ static av_cold int e2enc_init(AVCodecContext *avctx) {
 
 static int e2enc_encode(AVCodecContext *avctx, AVPacket *pkt,
                              const AVFrame *frame, int *got_packet) {
-    
+
+    av_log(avctx, AV_LOG_DEBUG, "e2enc_encode enter! \n");
     e2eEncoderContext *ctx = avctx->priv_data;
     uint8_t* e2enc_idata;
     int e2enc_idata_size;
@@ -86,7 +87,7 @@ static int e2enc_encode(AVCodecContext *avctx, AVPacket *pkt,
         return -1;
     }
 
-    e2e_pic_t* pic_in = (e2e_pic_t*) malloc(sizeof(e2e_pic_t));
+    e2e_pic_t* pic_in = av_malloc(sizeof(e2e_pic_t));
     pic_in->data = e2enc_idata;
     pic_in->data_size = e2enc_idata_size;
 
@@ -114,6 +115,18 @@ static int e2enc_encode(AVCodecContext *avctx, AVPacket *pkt,
     pkt->data = bit_stream_out->bitstream;
     pkt->size = bit_stream_out->bitstream_size;
     *got_packet = 1;  // 标记已成功生成数据包
+    
+    if(e2enc_idata!=NULL)
+    {
+        free(e2enc_idata);
+        e2enc_idata=NULL;
+    }
+
+    if(pic_in!=NULL)
+    {
+        av_free(pic_in);
+        pic_in=NULL;
+    }
  
     return 0;
 }
@@ -126,16 +139,22 @@ static void e2enc_flush(AVCodecContext *avctx)
 
 static av_cold int e2enc_close(AVCodecContext *avctx) {
     // 清理编码器
-    int ret = -1;
+    int ret = 0;
     e2eEncoderContext* ctx = (e2eEncoderContext*)avctx->priv_data;
     e2e_t* e2e_handle = ctx->e2e_hanle;
-    if(e2e_handle!=NULL)
+    if(e2e_handle!=NULL){
         ret = e2e_encoder_clean(e2e_handle);
+    }
+    if(ctx->config!=NULL)
+    {
+        av_free(ctx->config);
+        ctx->config=NULL;
+    }
     return ret;
 }
 
 static const AVClass e2enc_class = {
-    .class_name = "e2enc",
+    .class_name = "e2enc_class",
     .item_name  = av_default_item_name,
     .option     = NULL,
     .version    = LIBAVUTIL_VERSION_INT,
