@@ -36,6 +36,7 @@ static av_cold int init(AVBSFContext *ctx)
     
     switch(ctx->par_in->codec_id){
         case AV_CODEC_ID_LBVC:
+        case AV_CODEC_ID_LBVC_UHS:
             ctx->par_out->codec_id = AV_CODEC_ID_H264;//AV_CODEC_ID_NUHD_NORMAL_H264;
             break;
         case AV_CODEC_ID_LBVC_HEVC:
@@ -261,6 +262,76 @@ fail:
     return ret;
 }
 
+
+// Dump YUV data to file
+static void dump_data_to_file(const uint8_t *buf,int buf_size, const char* filename) {
+    FILE* file = fopen(filename, "wb");
+    if (!file) {
+        fprintf(stderr, "Could not open file %s for writing\n", filename);
+        return;
+    }
+
+    fwrite(buf, 1, buf_size, file);
+    fclose(file);
+}
+#define MAX_FRAME_BLK 200
+static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
+{   
+    GetByteContext gb;
+    PutByteContext pb;
+    AVPacket *in;
+    uint8_t *pos ;
+    int32_t header = 0;
+    int count = 0;
+    int ret;
+
+    ret = ff_bsf_get_packet(ctx, &in);
+    if (ret < 0)
+        return ret;
+
+    ret = av_new_packet(out, in->size );
+    if (ret < 0)
+        goto fail;
+
+#if 0
+    static int frames = 1;
+    char filename[256];
+    snprintf(filename, sizeof(filename), "testout/output%df_blocks.bin",frames);
+    dump_data_to_file(in->data, in->size,filename);
+    frames++;
+#endif
+    bytestream2_init(&gb, in->data, in->size);
+    bytestream2_init_writer(&pb, out->data, out->size);
+
+    header = bytestream2_get_be32(&gb);
+    if(((header & 0xffff0000) >> 16) == 0xfffe){
+        count = (header & 0x0000ffff);
+    }
+    if((count > 0) && (count <= MAX_FRAME_BLK)){
+        bytestream2_skip(&gb,2);
+        bytestream2_skip(&gb,2);
+        bytestream2_skip(&gb,2);
+        bytestream2_skip(&gb,2);
+        bytestream2_copy_buffer(&pb, &gb, (in->size-(bytestream2_tell_p(&pb))));
+        out->size = bytestream2_tell_p(&pb);
+        ret = av_packet_copy_props(out, in);
+        if (ret < 0){
+            av_log(ctx, AV_LOG_ERROR,"filter_uhs av_packet_copy_props error. \n");
+            goto fail;
+        }
+    }else{
+        av_log(ctx,AV_LOG_ERROR,"header error... \n");
+        goto fail;
+    }
+    return 0;
+fail:
+    if (ret < 0)
+        av_packet_unref(out);
+    av_packet_free(&in);
+    return -1;
+    
+}
+
 static uint8_t fake_hevc_frame_old[] = {
     0x00, 0x00, 0x00, 0x01, 0x40, 0x01, 0x0C, 0x08, 
     0xFF, 0xFF, 0x01, 0x60, 0x00, 0x00, 0x03, 0x00, 
@@ -371,6 +442,9 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
         case AV_CODEC_ID_E2ENC:
             ret = filter_e2e(ctx,out);
             break;
+        case AV_CODEC_ID_LBVC_UHS:
+            ret = filter_uhs(ctx,out);
+            break;
     }
 
     return ret;
@@ -378,7 +452,7 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
 
 const FFBitStreamFilter ff_nuhd_to_normal_bsf = {
     .p.name         = "nuhd_to_normal",
-    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_LBVC_HEVC, AV_CODEC_ID_HLBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_NONE },
+    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_LBVC_HEVC, AV_CODEC_ID_HLBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_LBVC_UHS, AV_CODEC_ID_NONE },
     .init           = init,
     .filter         = filter,
 };

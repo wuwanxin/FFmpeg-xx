@@ -810,6 +810,7 @@ extern const FFCodec ff_libx262_encoder;
 extern const FFCodec ff_lbvc_encoder;
 extern const FFCodec ff_lbvc_hevc_encoder;
 extern const FFCodec ff_hlbvc_encoder;
+extern const FFCodec ff_lbvc_uhs_encoder;
 extern const FFCodec ff_e2enc_encoder;
 
 #if CONFIG_LIBX264_ENCODER

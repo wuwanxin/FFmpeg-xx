@@ -53,6 +53,7 @@ enum AVCodecID {
     AV_CODEC_ID_LBVC,
     AV_CODEC_ID_LBVC_HEVC,
     AV_CODEC_ID_HLBVC,
+    AV_CODEC_ID_LBVC_UHS,
     AV_CODEC_ID_E2ENC,
     /* video codecs */
     AV_CODEC_ID_MPEG1VIDEO,
