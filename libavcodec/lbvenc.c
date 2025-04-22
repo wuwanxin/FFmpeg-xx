@@ -584,7 +584,7 @@ static const enum AVPixelFormat pix_fmts_all[] = {
     AV_PIX_FMT_NONE
 };
 
-FFCodec ff_lbvc_encoder = {
+FFCodec ff_liblbvc_encoder = {
     .p.name           = "lbvenc",
     CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
@@ -603,7 +603,7 @@ FFCodec ff_lbvc_encoder = {
                       ,
 };
 
-FFCodec ff_lbvc_hevc_encoder = {
+FFCodec ff_liblbvc_hevc_encoder = {
     .p.name           = "lbvenc_hevc",
     CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
@@ -622,7 +622,7 @@ FFCodec ff_lbvc_hevc_encoder = {
                       ,
 };
 
-FFCodec ff_hlbvc_encoder = {
+FFCodec ff_libhlbvc_encoder = {
     .p.name           = "hlbvenc",
     CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,

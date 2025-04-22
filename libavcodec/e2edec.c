@@ -169,7 +169,7 @@ static const AVClass e2edec_class = {
 
 
 
-const FFCodec ff_e2enc_decoder = {
+const FFCodec ff_libe2e_decoder = {
     .p.name           = "e2edec",
     CODEC_LONG_NAME("End to End Video Decoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,

@@ -48,14 +48,14 @@ static int decode_nal_sei_decoded_picture_hash(HEVCSEIPictureHash *s,
     }
     return 0;
 }
-
+#if CONFIG_LIBLBVC_ENCODER
 static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(H2645SEILbvencEnhanceData *s,
                                                GetByteContext *gb,void *logctx)
 {
     
     return lbvenc_enhance_data_decode(s,gb,logctx);
 }
-
+#endif
 static int decode_nal_sei_mastering_display_info(HEVCSEIMasteringDisplay *s,
                                                  GetByteContext *gb)
 {
@@ -238,8 +238,10 @@ static int decode_nal_sei_suffix(GetBitContext *gb, GetByteContext *gbyte,
     switch (type) {
     case SEI_TYPE_DECODED_PICTURE_HASH:
         return decode_nal_sei_decoded_picture_hash(&s->picture_hash, gbyte);
+#if CONFIG_LIBLBVC_ENCODER
     case SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA:
         return decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&s->lbvenc_enhance_data, gbyte,logctx);
+#endif
     default:
         av_log(logctx, AV_LOG_DEBUG, "Skipped SUFFIX SEI %d\n", type);
         return 0;
