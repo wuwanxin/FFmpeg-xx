@@ -1447,7 +1447,7 @@ test_pkg_config(){
     pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
     pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
     pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
-    check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
+    check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" && echo "$pkg_libs yes" && 
         enable $name &&
         set_sanitized "${name}_cflags"    $pkg_cflags &&
         set_sanitized "${name}_incdir"    $pkg_incdir &&
@@ -1477,8 +1477,8 @@ test_pkg_config_cpp(){
 check_pkg_config(){
     log check_pkg_config "$@"
     name="$1"
-    test_pkg_config "$@" &&
-        eval add_cflags \$${name}_cflags
+    test_pkg_config "$@" && 
+        eval add_cflags \$${name}_cflags && echo "add_cflags ${name}_cflags"
 }
 
 check_pkg_config_cpp(){
@@ -6944,14 +6944,21 @@ fi
 
 if enabled nuhd; then
     if enabled libe2e; then
-        enabled libe2e && check_pkg_config nuhd_e2e_enc nuhd_e2e_enc e2e/e2e_enc.h e2e_encode && check_pkg_config nuhd_e2e_dec nuhd_e2e_dec e2e/e2e_dec.h e2e_decode  || disable libe2e
+        enabled libe2e && check_pkg_config libe2e nuhd_e2e_enc e2e/e2e_enc.h e2e_encode  || disable libe2e
+        if disabled libe2e; then
+            require libe2e_enc e2e/e2e_enc.h e2e_encode -le2e_enc && enable libe2e
+        fi
     else
         disable libe2e && echo "disable nuhd e2e"
     fi
     if enabled liblbvc; then
-        check_pkg_config liblbvc liblbvc mediaass/sevc_enc.h sevc_encode_init && enabled liblbvc && enabled liblbvc_hevc && enabled libhlbvc || disable liblbvc
+        check_pkg_config liblbvc nuhd_sevc mediaass/sevc_enc.h sevc_encode_init && enable liblbvc && enable liblbvc_hevc && enable libhlbvc || disable liblbvc
+        if disabled liblbvc; then
+            require liblbvc mediaass/sevc_enc.h sevc_encode_init -llbvenc_host && enable liblbvc
+        fi
     else
         disable liblbvc && disable liblbvc_hevc && disable libhlbvc && echo "disable nuhd enhance codec liblbvc liblbvc_hevc libhlbvc"
+        disable lbvdec
     fi
     if disabled libe2e && disabled liblbvc; then
         disable nuhd_to_normal_bsf && echo "disable nuhd bsf nuhd_to_normal"
@@ -8045,3 +8052,7 @@ for lib in $LIBRARY_LIST; do
 done
 
 cp_if_changed $TMPH ffbuild/config.sh
+
+echo "CFLAGS LDFLAGS test"
+echo $CFLAGS
+echo $LDFLAGS
