@@ -6944,7 +6944,7 @@ fi
 
 if enabled nuhd; then
     if enabled libe2e; then
-        enabled libe2e && check_pkg_config libe2e nuhd_e2e_enc e2e/e2e_enc.h e2e_encode  || disable libe2e
+        enabled libe2e && check_pkg_config libe2e nuhd_e2e e2e/e2e_enc.h e2e_encode  || disable libe2e
         if disabled libe2e; then
             require libe2e_enc e2e/e2e_enc.h e2e_encode -le2e_enc && enable libe2e
         fi
