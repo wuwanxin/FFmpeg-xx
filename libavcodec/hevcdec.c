@@ -3429,10 +3429,11 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
                 return ret;
             }
         }
-
+#if CONFIG_LIBLBVC_ENCODER
         if(s->sei.lbvenc_enhance_data.present){
             lbvenc_enhance_data_opaque_preprocess(s->sei.lbvenc_enhance_data,&s->output_frame->opaque);
         }
+#endif
 
     }
     s->sei.picture_hash.is_md5 = 0;

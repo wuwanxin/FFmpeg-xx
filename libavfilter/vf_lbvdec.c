@@ -37,8 +37,10 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/avassert.h"
-#include "mediaass/sevc_dec.h"
 
+#if CONFIG_LIBLBVC_ENCODER
+#include "mediaass/sevc_dec.h"
+#endif
 static const char *const var_names[] = {
     "in_w", "iw",   ///< width  of the input video
     "in_h", "ih",   ///< height of the input video
@@ -101,6 +103,7 @@ typedef struct ThreadData {
     AVFrame *in, *out;
 } ThreadData;
 
+#if CONFIG_LIBLBVC_ENCODER
 static void image_copy_plane(uint8_t *dst, int dst_linesize,
                          const uint8_t *src, int src_linesize,
                          int bytewidth, int height)
@@ -233,7 +236,7 @@ static int do_conversion(AVFilterContext *ctx, void *arg, int jobnr,
     frame_process_video(ctx , dst, src);
     return 0;
 }
-
+#endif
 static int query_formats(AVFilterContext *ctx)
 {
 #if 0
@@ -402,9 +405,11 @@ static int config_output(AVFilterLink *link)
     //link->sample_aspect_ratio = ;//use src
 
     printf("config_output src(%dx%d) out(%dx%d) format(%d)\n",ctx->inputs[0]->w,ctx->inputs[0]->h,link->w,link->h,link->format);
-
+#if CONFIG_LIBLBVC_ENCODER
     sevc_layer1_dec_init(ctx->inputs[0]->w,ctx->inputs[0]->h,link->w,link->h);
-
+#else
+    return -1;
+#endif
     return 0;
 }
 
@@ -501,8 +506,11 @@ FF_ENABLE_DEPRECATION_WARNINGS
     // if(res = avctx->internal->execute(avctx, do_conversion, &td, NULL, FFMIN(outlink->h, avctx->graph->nb_threads))) {
     //     return res;
     // }
+#if CONFIG_LIBLBVC_ENCODER
     frame_process_video(avctx,out, frame);
-
+else
+    return -1;
+#endif
     av_frame_free(&frame);
 
     return ff_filter_frame(outlink, out);

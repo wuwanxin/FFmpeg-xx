@@ -110,6 +110,7 @@ static void modify_bytestream(GetByteContext gb,int start,int size) {
 frame size:32 bits(not include type byte)
 frame type:8 bits
 **/
+#if CONFIG_LIBLBVC_ENCODER
 static int filter_lbvc(AVBSFContext *ctx, AVPacket *out)
 {
     unsigned second_field_offset = 0;
@@ -260,7 +261,7 @@ fail:
     av_packet_free(&in);
     return ret;
 }
-
+#endif
 static uint8_t fake_hevc_frame_old[] = {
     0x00, 0x00, 0x00, 0x01, 0x40, 0x01, 0x0C, 0x08, 
     0xFF, 0xFF, 0x01, 0x60, 0x00, 0x00, 0x03, 0x00, 
@@ -364,13 +365,19 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
 {
     int ret = 0;
     switch(ctx->par_in->codec_id){
+#if CONFIG_LIBLBVC_ENCODER
         case AV_CODEC_ID_LBVC:
         case AV_CODEC_ID_LBVC_HEVC:
             ret = filter_lbvc(ctx,out);
             break;
+#endif
+#if CONFIG_LIBE2E_ENCODER
         case AV_CODEC_ID_E2ENC:
             ret = filter_e2e(ctx,out);
             break;
+#endif
+        default:
+            return -1;
     }
 
     return ret;

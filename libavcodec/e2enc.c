@@ -171,7 +171,7 @@ static const enum AVPixelFormat pix_fmts_all[] = {
     AV_PIX_FMT_RGB24,     ///< packed RGB 8:8:8, 24bpp, RGBRGB...
 };
 
-const FFCodec ff_e2enc_encoder = {
+const FFCodec ff_libe2e_encoder = {
     .p.name           = "e2enc",
     CODEC_LONG_NAME("End to End Video Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
