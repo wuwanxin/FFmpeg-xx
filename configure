@@ -1783,6 +1783,7 @@ EXTERNAL_LIBRARY_NONFREE_LIST="
     nuhd
     libe2e
     liblbvc
+    liblbvc_uhs
 "
 
 EXTERNAL_LIBRARY_VERSION3_LIST="
@@ -3410,6 +3411,7 @@ libe2e_encoder_deps="libe2e"
 liblbvc_encoder_deps="liblbvc"
 liblbvc_hevc_encoder_deps="liblbvc_hevc"
 libhlbvc_encoder_deps="libhlbvc"
+liblbvc_uhs_encoder_deps="liblbvc_uhs"
 libzvbi_teletext_decoder_deps="libzvbi"
 vapoursynth_demuxer_deps="vapoursynth"
 videotoolbox_suggest="coreservices"
@@ -6960,7 +6962,10 @@ if enabled nuhd; then
         disable liblbvc && disable liblbvc_hevc && disable libhlbvc && echo "disable nuhd enhance codec liblbvc liblbvc_hevc libhlbvc"
         disable lbvdec
     fi
-    if disabled libe2e && disabled liblbvc; then
+    if enabled liblbvc_uhs;then
+        enable liblbvc_uhs && echo "enable nuhd uhs"
+    fi
+    if disabled libe2e && disabled liblbvc && disabled liblbvc_uhs; then
         disable nuhd_to_normal_bsf && echo "disable nuhd bsf nuhd_to_normal"
     fi
 fi

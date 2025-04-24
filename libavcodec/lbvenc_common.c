@@ -23,7 +23,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mediaass/sevc_enc.h>
 
 #include "bytestream.h"
 #include <limits.h>

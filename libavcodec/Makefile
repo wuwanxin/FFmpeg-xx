@@ -1138,7 +1138,8 @@ OBJS-$(CONFIG_LIBZVBI_TELETEXT_DECODER)   += libzvbi-teletextdec.o ass.o
 
 # lbvc (individual)
 #CONFIG_LIBLBVC_ENCODER
-OBJS-$(CONFIG_LIBLBVC_ENCODER)            += lbvenc.o lbvenc_common.o
+OBJS-$(CONFIG_LIBLBVC_ENCODER)            += lbvenc.o lbvenc_uhs.o lbvenc_common.o
+OBJS-$(CONFIG_LIBLBVC_UHS_ENCODER)        += lbvenc_uhs.o lbvenc_common.o
 OBJS-$(CONFIG_LIBE2E_ENCODER)             += e2enc.o
 OBJS-$(CONFIG_LIBE2E_DECODER)             += e2edec.o
 
