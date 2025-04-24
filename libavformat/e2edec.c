@@ -13,7 +13,6 @@
 
 static int e2e_probe(const AVProbeData *p)
 {
-    printf("TTT e2e_probe start!");
     int valid_frames = 0;  // 统计有效的帧数
     int i;
 
@@ -23,8 +22,8 @@ static int e2e_probe(const AVProbeData *p)
 
     // 遍历数据，查找帧头 0xFF 0xFF
     for (i = 0; i + 1 < p->buf_size; i++) {
-        // 检测帧头 0xFF 0xFF
-        if (p->buf[i] == 0xFF && p->buf[i + 1] == 0xFF) {
+        // 检测帧头 0xFF 0xFF 确认格式0-rgb888 1-yuv420 
+        if (p->buf[i] == 0xFF && p->buf[i + 1] == 0xFF && (p->buf[i + 2] == 0x00 || p->buf[i + 2] == 0x01)) {
             // 确保剩余数据足够（假设帧头后至少2字节的有效数据）
             if (i + 3 >= p->buf_size)
                 break;
