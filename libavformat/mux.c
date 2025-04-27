@@ -925,6 +925,8 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
 {
     FFFormatContext *const si = ffformatcontext(s);
     int stream_count = 0;
+    // NETINT: fix scte35 handling in muxing buffer
+    int scte35_count = 0; // scte35 stream count
     int noninterleaved_count = 0;
     int ret;
     int eof = flush;
@@ -938,7 +940,16 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
         const AVStream *const st  = s->streams[i];
         const FFStream *const sti = cffstream(st);
         const AVCodecParameters *const par = st->codecpar;
-        if (sti->last_in_packet_buffer) {
+        // NETINT: fix scte35 handling in muxing buffer
+        // flush scte35 in muxing buffer like regular AV streams to fix ffmpeg muxing output
+        // stall when scte35 packet DTS has large delta compared to regular AV packet DTS
+        if (sti->last_in_packet_buffer || par->codec_id == AV_CODEC_ID_SCTE_35) {
+            // treat scte35 like regular AV stream for flush consideration
+            // NETINT: fix scte35 handling in muxing buffer
+            if (par->codec_id == AV_CODEC_ID_SCTE_35) {
+                // keep count of scte35 stream to avoid flushing when regular AV streams end
+                scte35_count++;
+            }
             ++stream_count;
         } else if (par->codec_type != AVMEDIA_TYPE_ATTACHMENT &&
                    par->codec_id != AV_CODEC_ID_VP8 &&
@@ -1022,7 +1033,10 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
         }
     }
 
-    if (stream_count && flush) {
+    // NETINT: fix scte35 handling in muxing buffer
+    // the muxing buffer requires at least one regular AV stream be present during flush, otherwise segfault
+    if (stream_count - scte35_count > 0 && flush) {
+        // flush if there are non-scte35 streams present AND it is required
         PacketListEntry *pktl = si->packet_buffer.head;
         AVStream *const st = s->streams[pktl->pkt.stream_index];
         FFStream *const sti = ffstream(st);

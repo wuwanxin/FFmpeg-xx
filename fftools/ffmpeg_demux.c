@@ -509,6 +509,23 @@ static const AVCodec *choose_decoder(const OptionsContext *o, AVFormatContext *s
             st->codecpar->codec_type = codec->type;
         return codec;
     } else {
+        // NETINT: force select the NI HW decoder when enabled by force_nidec parameter
+        if (o->force_nidec && st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            // NETINT: find NI HW decoder based on the codec id.
+            // exit if the parameter is unsupported or could not find a decoder.
+            if (!av_strcasecmp(o->force_nidec, "logan")) {
+                hwaccel_id = HWACCEL_GENERIC;
+                hwaccel_device_type = AV_HWDEVICE_TYPE_NI_LOGAN;
+            } else if (!av_strcasecmp(o->force_nidec, "quadra")) {
+                hwaccel_id = HWACCEL_GENERIC;
+                hwaccel_device_type = AV_HWDEVICE_TYPE_NI_QUADRA;
+            } else {
+                av_log(NULL, AV_LOG_FATAL, "Unsupported parameter force_nidec value (%s), "
+                       "supported value is logan or quadra\n", o->force_nidec);
+                exit_program(1);
+            }
+        }
+
         if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
             hwaccel_id == HWACCEL_GENERIC &&
             hwaccel_device_type != AV_HWDEVICE_TYPE_NONE) {
@@ -628,12 +645,8 @@ static void add_input_streams(const OptionsContext *o, Demuxer *d)
         MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
         if (codec_tag) {
             uint32_t tag = strtol(codec_tag, &next, 0);
-            if (*next) {
-                uint8_t buf[4] = { 0 };
-                memcpy(buf, codec_tag, FFMIN(sizeof(buf), strlen(codec_tag)));
-                tag = AV_RL32(buf);
-            }
-
+            if (*next)
+                tag = AV_RL32(codec_tag);
             st->codecpar->codec_tag = tag;
         }
 
@@ -759,7 +772,17 @@ static void add_input_streams(const OptionsContext *o, Demuxer *d)
         switch (par->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
             // avformat_find_stream_info() doesn't set this for us anymore.
-            ist->dec_ctx->framerate = st->avg_frame_rate;
+
+            // NETINT: use bitstream framerate info when find_stream_info cannot estimate it
+            if ((st->avg_frame_rate.num != 0) && (st->avg_frame_rate.den != 0)){
+                ist->dec_ctx->framerate = st->avg_frame_rate;
+            }else if ((st->r_frame_rate.num != 0) && (st->r_frame_rate.den != 0)){
+                ist->dec_ctx->framerate = st->r_frame_rate;
+            }else{
+                av_log(NULL, AV_LOG_WARNING, "No framerate info found or probed -> using a default 30 fps\n");
+                ist->dec_ctx->framerate.num = 30;
+                ist->dec_ctx->framerate.den = 1;
+            }
 
             MATCH_PER_STREAM_OPT(frame_rates, str, framerate, ic, st);
             if (framerate && av_parse_video_rate(&ist->framerate,

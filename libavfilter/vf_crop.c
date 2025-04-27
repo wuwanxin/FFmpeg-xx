@@ -93,7 +93,8 @@ typedef struct CropContext {
 
 static int query_formats(AVFilterContext *ctx)
 {
-    int reject_flags = AV_PIX_FMT_FLAG_BITSTREAM | FF_PIX_FMT_FLAG_SW_FLAT_SUB;
+    // NETINT: reject hardware frames as input to software crop filter
+    int reject_flags = AV_PIX_FMT_FLAG_BITSTREAM | FF_PIX_FMT_FLAG_SW_FLAT_SUB | AV_PIX_FMT_FLAG_HWACCEL;
 
     return ff_set_common_formats(ctx, ff_formats_pixdesc_filter(0, reject_flags));
 }

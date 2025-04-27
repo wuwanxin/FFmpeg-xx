@@ -446,6 +446,11 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
         report_and_exit(AVERROR(ENOMEM));
     ms->last_mux_dts = AV_NOPTS_VALUE;
 
+    // NETINT: add option to display windowed average FPS
+    ost->ni_prev_fps_measurement_time = 0;
+    ost->ni_prev_frame_count = 0;
+    ost->ni_prev_fps = 0;
+
     ost->st         = st;
     ost->ist        = ist;
     ost->kf.ref_pts = AV_NOPTS_VALUE;
@@ -606,11 +611,8 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
     MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, oc, st);
     if (codec_tag) {
         uint32_t tag = strtol(codec_tag, &next, 0);
-        if (*next) {
-            uint8_t buf[4] = { 0 };
-            memcpy(buf, codec_tag, FFMIN(sizeof(buf), strlen(codec_tag)));
-            tag = AV_RL32(buf);
-        }
+        if (*next)
+            tag = AV_RL32(codec_tag);
         ost->st->codecpar->codec_tag = tag;
         if (ost->enc_ctx)
             ost->enc_ctx->codec_tag = tag;
@@ -622,7 +624,8 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
         ost->enc_ctx->global_quality = FF_QP2LAMBDA * qscale;
     }
 
-    ms->max_muxing_queue_size = 128;
+    // NETINT: change max_muxing_queue_size from 128 to 512 to alleviate muxing issues due to encoding latency
+    ms->max_muxing_queue_size = 512;
     MATCH_PER_STREAM_OPT(max_muxing_queue_size, i, ms->max_muxing_queue_size, oc, st);
 
     ms->muxing_queue_data_threshold = 50*1024*1024;
@@ -2066,7 +2069,7 @@ static void parse_forced_key_frames(KeyframeForceCtx *kf, const Muxer *mux,
         if (next)
             *next++ = 0;
 
-        if (strstr(p, "chapters") == p) {
+        if (!memcmp(p, "chapters", 8)) {
             AVChapter * const *ch = mux->fc->chapters;
             unsigned int    nb_ch = mux->fc->nb_chapters;
             int j;

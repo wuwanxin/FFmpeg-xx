@@ -70,6 +70,8 @@ enum HWAccelID {
     HWACCEL_NONE = 0,
     HWACCEL_AUTO,
     HWACCEL_GENERIC,
+    HWACCEL_NI_LOGAN,
+    HWACCEL_NI_QUADRA
 };
 
 typedef struct HWDevice {
@@ -126,6 +128,8 @@ typedef struct OptionsContext {
     float readrate;
     int accurate_seek;
     int thread_queue_size;
+    // NETINT: add option for force nidec
+    const char *force_nidec;
     int input_sync_ref;
     int find_stream_info;
 
@@ -590,6 +594,11 @@ typedef struct OutputStream {
     AVRational mux_timebase;
     AVRational enc_timebase;
 
+    // NETINT: add option to display windowed average FPS
+    int64_t ni_prev_fps_measurement_time;
+    int ni_prev_frame_count;
+    float ni_prev_fps;
+
     AVCodecContext *enc_ctx;
     AVFrame *filtered_frame;
     AVFrame *last_frame;
@@ -725,6 +734,8 @@ extern float audio_drift_threshold;
 extern float dts_delta_threshold;
 extern float dts_error_threshold;
 
+extern float ni_interval_fps; // NETINT: windowed average FPS display window size
+
 extern enum VideoSyncMethod video_sync_method;
 extern float frame_drop_threshold;
 extern int do_benchmark;
@@ -796,6 +807,14 @@ int ffmpeg_parse_options(int argc, char **argv);
 void enc_stats_write(OutputStream *ost, EncStats *es,
                      const AVFrame *frame, const AVPacket *pkt,
                      uint64_t frame_num);
+
+#if CONFIG_NI_QUADRA
+int ni_quad_init(AVCodecContext *s);
+#endif
+
+#if CONFIG_NI_LOGAN
+int ni_logan_init(AVCodecContext *s);
+#endif
 
 HWDevice *hw_device_get_by_name(const char *name);
 int hw_device_init_from_string(const char *arg, HWDevice **dev);

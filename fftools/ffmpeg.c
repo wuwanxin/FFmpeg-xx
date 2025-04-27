@@ -1613,9 +1613,26 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             float fps;
             uint64_t frame_number = atomic_load(&ost->packets_written);
 
-            fps = t > 1 ? frame_number / t : 0;
+            // NETINT: add option to display windowed average FPS
+            if (ni_interval_fps > 0) { // if ni_interval_fps arg selected, calculate windowed average FPS
+                float interval = (cur_time - ost->ni_prev_fps_measurement_time)/ 1000000.0 ;
+                if (interval >= (float)ni_interval_fps) { // update fps at every ni_interval_fps
+                    fps = (frame_number - ost->ni_prev_frame_count) / interval;
+                    // store variables for tracking windowed average FPS in OutputStream object
+                    ost->ni_prev_fps = fps;
+                    ost->ni_prev_fps_measurement_time = cur_time;
+                    ost->ni_prev_frame_count = frame_number;
+                } else { // display FPS from previous interval if windowing interval not yet reached
+                    fps = ost->ni_prev_fps;
+                }
+            } else { // else, use default FFmpeg default fps calculation
+                fps = t > 1 ? frame_number / t : 0;
+            }
+
+            // NETINT: add option to display windowed average FPS
+            // in addition to default behavior, display 1 decimal place in FPS if ni_interval_fps selected
             av_bprintf(&buf, "frame=%5"PRId64" fps=%3.*f q=%3.1f ",
-                     frame_number, fps < 9.95, fps, q);
+                     frame_number, (fps < 9.95) || ni_interval_fps, fps, q);
             av_bprintf(&buf_script, "frame=%"PRId64"\n", frame_number);
             av_bprintf(&buf_script, "fps=%.2f\n", fps);
             av_bprintf(&buf_script, "stream_%d_%d_q=%.1f\n",
@@ -2039,6 +2056,18 @@ static int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_ref
 
         ret = configure_filtergraph(fg);
         if (ret < 0) {
+            switch (ifilter->format) {
+            case AV_PIX_FMT_NI_QUAD:
+            case AV_PIX_FMT_NI_LOGAN:
+                if (need_reinit && (ret == AVERROR(ENOSYS)))
+                    av_log(NULL, AV_LOG_ERROR,
+                           "Sequence change is not supported with hw frames + "
+                           "autoscale(default). Please use -noautoscale "
+                           "option.\n");
+                break;
+            default:
+                break;
+            }
             av_log(NULL, AV_LOG_ERROR, "Error reinitializing filters!\n");
             return ret;
         }
@@ -2608,6 +2637,9 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
             ret = decode_video    (ist, repeating ? NULL : avpkt, &got_output, &duration_pts, !pkt,
                                    &decode_failed);
             if (!repeating || !pkt || got_output) {
+                if (got_output && repeating) { // NETINT: if a frame is already decoded no need to update DTS or PTS
+                    break;
+                }
                 if (pkt && pkt->duration) {
                     duration_dts = av_rescale_q(pkt->duration, ist->st->time_base, AV_TIME_BASE_Q);
                 } else if(ist->dec_ctx->framerate.num != 0 && ist->dec_ctx->framerate.den != 0) {
@@ -3208,10 +3240,37 @@ static int init_output_stream(OutputStream *ost, AVFrame *frame,
     if (ost->enc_ctx) {
         const AVCodec *codec = ost->enc_ctx->codec;
         InputStream *ist = ost->ist;
+        AVCodecContext *dec = NULL;
 
         ret = init_output_stream_encode(ost, frame);
         if (ret < 0)
             return ret;
+
+        // NETINT: automatically enabling GenHdrs for MKV and HLS container format support
+        if (!strcmp(output_files[ost->file_index]->format->name, "matroska") ||
+            !strcmp(output_files[ost->file_index]->format->name, "hls") ||
+            !strcmp(output_files[ost->file_index]->format->name, "asf")) {
+            AVDictionaryEntry *t;
+            if ((t = av_dict_get(ost->encoder_opts, "xcoder-params", NULL, 0))) {
+                int i;
+                size_t len = strlen(t->value);
+                // Remove all colons if exist at the end of option values before appending GenHdrs
+                for(i=len-1; i>0; i--)
+                {
+                    if(t->value[i] == ':')
+                    {
+                        t->value[i] = '\0';
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                av_dict_set(&ost->encoder_opts, "xcoder-params", ":GenHdrs=1", AV_DICT_APPEND);
+            } else if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+                av_opt_set(ost->enc_ctx->priv_data, "xcoder-params", "GenHdrs=1", 0);
+            }
+        }
 
         if (!av_dict_get(ost->encoder_opts, "threads", NULL, 0))
             av_dict_set(&ost->encoder_opts, "threads", "auto", 0);
@@ -3637,6 +3696,18 @@ static void reset_eagain(void)
         ost->unavailable = 0;
 }
 
+// NETINT: Recognize whether the codec is one of NI Logan hardware
+static inline int is_ni_logan_hardware_decoder(const char *codec_name)
+{
+    int ret =
+        !strncmp(codec_name, "h264_ni_logan", strlen("h264_ni_logan")) ||
+        !strncmp(codec_name, "h265_ni_logan", strlen("h265_ni_logan")) ||
+        !strncmp(codec_name, "jpeg_ni_logan", strlen("jpeg_ni_logan")) ||
+        !strncmp(codec_name, "vp9_ni_logan", strlen("vp9_ni_logan"));
+
+    return ret;
+}
+
 static void decode_flush(InputFile *ifile)
 {
     for (int i = 0; i < ifile->nb_streams; i++) {
@@ -3646,24 +3717,29 @@ static void decode_flush(InputFile *ifile)
         if (!ist->processing_needed)
             continue;
 
-        do {
-            ret = process_input_packet(ist, NULL, 1);
-        } while (ret > 0);
+        // NETINT: skip sending NULL packet to NI Logan decoder when it is
+        // still in stream loops because the NI Logan decoder would refuse
+        // new packets when it is flushed.
+        if (!is_ni_logan_hardware_decoder(ist->dec_ctx->codec->name)) {
+            do {
+                ret = process_input_packet(ist, NULL, 1);
+            } while (ret > 0);
 
-        if (ist->decoding_needed) {
-            /* report last frame duration to the demuxer thread */
-            if (ist->par->codec_type == AVMEDIA_TYPE_AUDIO) {
-                LastFrameDuration dur;
+            if (ist->decoding_needed) {
+                /* report last frame duration to the demuxer thread */
+                if (ist->par->codec_type == AVMEDIA_TYPE_AUDIO) {
+                    LastFrameDuration dur;
 
-                dur.stream_idx = i;
-                dur.duration   = av_rescale_q(ist->nb_samples,
-                                              (AVRational){ 1, ist->dec_ctx->sample_rate},
-                                              ist->st->time_base);
+                    dur.stream_idx = i;
+                    dur.duration   = av_rescale_q(ist->nb_samples,
+                                                (AVRational){ 1, ist->dec_ctx->sample_rate},
+                                                ist->st->time_base);
 
-                av_thread_message_queue_send(ifile->audio_duration_queue, &dur, 0);
+                    av_thread_message_queue_send(ifile->audio_duration_queue, &dur, 0);
+                }
+
+                avcodec_flush_buffers(ist->dec_ctx);
             }
-
-            avcodec_flush_buffers(ist->dec_ctx);
         }
     }
 }
