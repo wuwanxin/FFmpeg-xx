@@ -300,6 +300,11 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_DYNAMIC_HDR10_PLUS,
 
     /**
+     * NETINT: HEVC tile/slice index in one frame.
+     */
+    AV_PKT_DATA_SLICE_ADDR,
+
+    /**
      * The number of side data types.
      * This is not part of the public API/ABI in the sense that it may
      * change when new side data types are added.

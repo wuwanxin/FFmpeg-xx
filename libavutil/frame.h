@@ -177,6 +177,49 @@ enum AVFrameSideDataType {
      */
     AV_FRAME_DATA_SEI_UNREGISTERED,
 
+    // NETINT: User data unregistered SEI data
+    /**
+     * This side data takes SEI payload type USER_DATA_UNREGISTERED.
+     * There will be no byte reordering.
+     * Usually this payload would be: 16B UUID + other payload Bytes.
+     */
+    AV_FRAME_DATA_NETINT_UDU_SEI,
+
+    // NETINT: Custom SEI data
+    /**
+     * This side data takes SEI payload custom types.
+     * There will be no byte reordering.
+     * Usually this payload would be: 1B Custom SEI type + 16B UUID + other payload Bytes.
+     */
+    AV_FRAME_DATA_NETINT_CUSTOM_SEI,
+
+    // NETINT: custom bitrate adjustment
+    /**
+     * This side data takes int32_t type data as payload which indicates the new target bitrate value.
+     */
+    AV_FRAME_DATA_NETINT_BITRATE,
+
+    // NETINT: custom min max qp adjustment
+    /**
+     * This side data is a struct of AVNetintMinMaxQP that indicates the new target qp value.
+     */
+    AV_FRAME_DATA_NETINT_MIN_MAX_QP,
+
+    // NETINT: long term reference frame support
+    /**
+     * This side data is a struct of AVNetintLongTermRef that specifies a
+     * frame's support of long term reference frame.
+     */
+    AV_FRAME_DATA_NETINT_LONG_TERM_REF,
+
+    // NETINT: Regions Of Interest extra parameters
+    /**
+     * This side data is an array of AVRegionOfInterestNetintExtra that
+     * complements AV_FRAME_DATA_REGIONS_OF_INTEREST, the number of array
+     * element is implied by AVFrameSideData.size / AVRegionOfInterestNetintExtra.self_size
+     */
+    AV_FRAME_DATA_NETINT_REGIONS_OF_INTEREST_EXTRA,
+
     /**
      * Film grain parameters for a frame, described by AVFilmGrainParams.
      * Must be present for every frame which should have film grain applied.
@@ -296,6 +339,45 @@ typedef struct AVRegionOfInterest {
      */
     AVRational qoffset;
 } AVRegionOfInterest;
+
+// NETINT extra parameters for ROI, complementing AVRegionOfInterest
+typedef struct AVRegionOfInterestNetintExtra
+{
+    /**
+     * Must be set to the size of this data structure (that is,
+     * sizeof(AVRegionOfInterestNetintExtra)).
+     */
+    uint32_t self_size;
+
+    int cls;
+    float prob;
+} AVRegionOfInterestNetintExtra;
+
+// NI_LOGAN_SET_CHANGE_PARAM_RC_MIN_MAX_QP
+typedef struct AVNetintMinMaxQP
+{
+  int32_t minQpI;                         /**< A minimum QP of I picture for rate control */
+  int32_t maxQpI;                         /**< A maximum QP of I picture for rate control */
+  int32_t maxDeltaQp;                     /**< A maximum delta QP for rate control */
+  int32_t minQpP;                         /**< A minimum QP of P picture for rate control */
+  int32_t minQpB;                         /**< A minimum QP of B picture for rate control */
+  int32_t maxQpP;                         /**< A maximum QP of P picture for rate control */
+  int32_t maxQpB;                         /**< A maximum QP of B picture for rate control */
+}AVNetintMinMaxQP;
+
+/**
+ * NETINT: Structure describing long term reference frame support.
+ *
+ */
+typedef struct AVNetintLongTermRef {
+  // A flag for the current picture to be used as a long term reference
+  // picture later at other pictures' encoding
+  uint8_t use_cur_src_as_long_term_pic;
+
+  // A flag to use a long term reference picture in DPB when encoding the
+  // current picture
+  uint8_t use_long_term_ref;
+} AVNetintLongTermRef;
 
 /**
  * This structure describes decoded (raw) audio or video data.
@@ -789,6 +871,29 @@ void av_frame_unref(AVFrame *frame);
  *           before calling this function to ensure that no memory is leaked.
  */
 void av_frame_move_ref(AVFrame *dst, AVFrame *src);
+
+#if CONFIG_NI_QUADRA
+/**
+ * Allocate new buffer(s) for video data.
+ *
+ * The following fields must be set on frame before calling this function:
+ * - format (pixel format for video)
+ * - width and height for video
+ *
+ * This function will fill AVFrame.data and AVFrame.buf arrays and, if
+ * necessary, allocate and fill AVFrame.extended_data and AVFrame.extended_buf.
+ * For planar formats, one buffer will be allocated for all planes.
+ *
+ * @warning: if frame already has been allocated, calling this function will
+ *           leak memory. In addition, undefined behavior can occur in certain
+ *           cases. 2pass encoding not yet supported
+ *
+ * @param frame frame in which to store the new buffers.
+ *
+ * @return 0 on success, a negative AVERROR on error.
+ */
+int av_frame_get_buffer_quadra(AVFrame *frame);
+#endif
 
 /**
  * Allocate new buffer(s) for audio or video data.

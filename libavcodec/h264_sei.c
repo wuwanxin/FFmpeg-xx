@@ -39,6 +39,10 @@
 #include "h264_sei.h"
 #include "sei.h"
 
+#if CONFIG_NI_LOGAN
+#include <ni_device_api_logan.h>
+#endif
+
 #define AVERROR_PS_NOT_FOUND      FFERRTAG(0xF8,'?','P','S')
 
 static const uint8_t sei_num_clock_ts_table[9] = {
@@ -58,6 +62,9 @@ void ff_h264_sei_uninit(H264SEIContext *h)
     h->common.film_grain_characteristics.present = 0;
     h->common.display_orientation.present = 0;
     h->common.afd.present                 =  0;
+#if CONFIG_NI_LOGAN
+    av_buffer_unref(&h->ni_custom.buf_ref);
+#endif
 
     ff_h2645_sei_reset(&h->common);
 }
@@ -228,6 +235,33 @@ static int decode_green_metadata(H264SEIGreenMetaData *h, GetByteContext *gb)
     return 0;
 }
 
+#if CONFIG_NI_LOGAN
+static int decode_ni_custom(H264SEINICustom *h, GetBitContext *gb, int size)
+{
+    int i, index;
+    ni_logan_all_custom_sei_t *p_all_custom_sei;
+    ni_logan_custom_sei_t *p_custom_sei;
+
+    h->buf_ref = av_buffer_allocz(sizeof(ni_logan_all_custom_sei_t));
+    if (!h->buf_ref)
+        return AVERROR(ENOMEM);
+
+    p_all_custom_sei = (ni_logan_all_custom_sei_t *) h->buf_ref->data;
+    index = p_all_custom_sei->custom_sei_cnt;
+    p_custom_sei = &p_all_custom_sei->ni_custom_sei[index];
+
+    for (i = 0; i < size; i++)
+        p_custom_sei->custom_sei_data[i] = get_bits(gb, 8);
+
+    /* default for AVC */
+    p_custom_sei->custom_sei_loc = NI_LOGAN_CUSTOM_SEI_LOC_BEFORE_VCL;
+    p_custom_sei->custom_sei_size = size;
+    p_custom_sei->custom_sei_type = h->type;
+    p_all_custom_sei->custom_sei_cnt++;
+    return 0;
+}
+#endif
+
 int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
                        const H264ParamSets *ps, void *logctx)
 {
@@ -287,6 +321,13 @@ int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
             if (ret == FF_H2645_SEI_MESSAGE_UNHANDLED)
                 av_log(logctx, AV_LOG_DEBUG, "unknown SEI type %d\n", type);
         }
+
+#if CONFIG_NI_LOGAN
+        if (type == h->ni_custom.type) {
+            ret = decode_ni_custom(&h->ni_custom, gb, size);
+        }
+#endif
+
         if (ret < 0 && ret != AVERROR_PS_NOT_FOUND)
             return ret;
         if (ret < 0)

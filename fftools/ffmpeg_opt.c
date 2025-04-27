@@ -66,6 +66,7 @@ char *sdp_filename;
 float audio_drift_threshold = 0.1;
 float dts_delta_threshold   = 10;
 float dts_error_threshold   = 3600*30;
+float ni_interval_fps = 0; // NETINT: add option to display windowed average FPS
 
 enum VideoSyncMethod video_sync_method = VSYNC_AUTO;
 float frame_drop_threshold = 0;
@@ -1473,6 +1474,8 @@ const OptionDef options[] = {
         "timestamp discontinuity delta threshold", "threshold" },
     { "dts_error_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,       { &dts_error_threshold },
         "timestamp error delta threshold", "threshold" },
+    { "ni_interval_fps", HAS_ARG | OPT_FLOAT | OPT_EXPERT,           { &ni_interval_fps }, // NETINT: add option to display windowed average FPS
+        "window size and reporting interval for moving average processing FPS calculation", "number" },
     { "xerror",         OPT_BOOL | OPT_EXPERT,                       { &exit_on_error },
         "exit on error", "error" },
     { "abort_on",       HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_abort_on },
@@ -1665,6 +1668,10 @@ const OptionDef options[] = {
         "set this video output stream to be a heartbeat stream for "
         "fix_sub_duration, according to which subtitles should be split at "
         "random access points" },
+    // NETINT: add option for force enable NI hardware decoder
+    { "force_nidec",      HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_OFFSET |
+                          OPT_INPUT,                                             { .off = OFFSET(force_nidec) },
+        "force select Netint HW decoders (supported values: logan, quadra)" },
 
     /* audio options */
     { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },

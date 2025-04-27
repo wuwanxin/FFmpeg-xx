@@ -27,6 +27,10 @@
 #include "hevc_ps.h"
 #include "hevc_sei.h"
 
+#if CONFIG_NI_LOGAN
+#include <ni_device_api_logan.h>
+#endif
+
 static int decode_nal_sei_decoded_picture_hash(HEVCSEIPictureHash *s,
                                                GetByteContext *gb)
 {
@@ -151,6 +155,32 @@ static int decode_nal_sei_active_parameter_sets(HEVCSEI *s, GetBitContext *gb, v
     return 0;
 }
 
+#if CONFIG_NI_LOGAN
+static int decode_nal_sei_ni_custom(HEVCSEINICustom *s, GetBitContext *gb, int size, int location)
+{
+    int i, index;
+    ni_logan_all_custom_sei_t *p_all_custom_sei;
+    ni_logan_custom_sei_t *p_custom_sei;
+
+    s->buf_ref = av_buffer_allocz(sizeof(ni_logan_all_custom_sei_t));
+    if (!s->buf_ref)
+        return AVERROR(ENOMEM);
+
+    p_all_custom_sei = (ni_logan_all_custom_sei_t *) s->buf_ref->data;
+    index = p_all_custom_sei->custom_sei_cnt;
+    p_custom_sei = &p_all_custom_sei->ni_custom_sei[index];
+
+    for (i = 0; i < size; i++)
+        p_custom_sei->custom_sei_data[i] = get_bits(gb, 8);
+
+    p_custom_sei->custom_sei_loc = location;
+    p_custom_sei->custom_sei_size = size;
+    p_custom_sei->custom_sei_type = s->type;
+    p_all_custom_sei->custom_sei_cnt++;
+    return 0;
+}
+#endif
+
 static int decode_nal_sei_timecode(HEVCSEITimeCode *s, GetBitContext *gb)
 {
     s->num_clock_ts = get_bits(gb, 2);
@@ -262,6 +292,11 @@ static int decode_nal_sei_message(GetByteContext *gb, void *logctx, HEVCSEI *s,
     }
     if (bytestream2_get_bytes_left(gb) < payload_size)
         return AVERROR_INVALIDDATA;
+#if CONFIG_NI_LOGAN
+    if (payload_type == s->ni_custom.type) {
+        return decode_nal_sei_ni_custom(&s->ni_custom, gb, payload_size, s->ni_custom.location);
+    }
+#endif
     bytestream2_init(&message_gbyte, gb->buffer, payload_size);
     ret = init_get_bits8(&message_gb, gb->buffer, payload_size);
     av_assert1(ret >= 0);

@@ -104,9 +104,7 @@ static av_cold int dvvideo_encode_init(AVCodecContext *avctx)
     ff_fdctdsp_init(&fdsp, avctx);
     ff_me_cmp_init(&mecc, avctx);
     ff_pixblockdsp_init(&pdsp, avctx);
-    ret = ff_set_cmp(&mecc, mecc.ildct_cmp, avctx->ildct_cmp);
-    if (ret < 0)
-        return AVERROR(EINVAL);
+    ff_set_cmp(&mecc, mecc.ildct_cmp, avctx->ildct_cmp);
 
     s->get_pixels = pdsp.get_pixels;
     s->ildct_cmp  = mecc.ildct_cmp[5];

@@ -344,6 +344,8 @@ External library support:
   --enable-libvpl          enable Intel oneVPL code via libvpl if libmfx is not used [no]
   --enable-libnpp          enable Nvidia Performance Primitives-based code [no]
   --enable-mmal            enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
+  --disable-ni_quadra      disable NetInt Quadra HWaccel codecs/filters [autodetect]
+  --disable-ni_logan       disable NetInt Logan HWaccel codecs/filters [autodetect]
   --disable-nvdec          disable Nvidia video decoding acceleration (via hwaccel) [autodetect]
   --disable-nvenc          disable Nvidia video encoding code [autodetect]
   --enable-omx             enable OpenMAX IL code [no]
@@ -1885,6 +1887,8 @@ HWACCEL_AUTODETECT_LIBRARY_LIST="
     d3d11va
     dxva2
     ffnvcodec
+    ni_quadra
+    ni_logan
     nvdec
     nvenc
     vaapi
@@ -3154,6 +3158,25 @@ amf_deps_any="libdl LoadLibrary"
 nvenc_deps="ffnvcodec"
 nvenc_deps_any="libdl LoadLibrary"
 
+hwupload_ni_quadra_filter_deps="ni_quadra"
+drawbox_ni_quadra_filter_deps="ni_quadra"
+drawtext_ni_quadra_filter_deps="ni_quadra libfreetype"
+drawtext_ni_quadra_filter_suggest="libfontconfig libfribidi"
+bgr_ni_quadra_filter_deps="ni_quadra"
+bg_ni_quadra_filter_deps="ni_quadra"
+crop_ni_quadra_filter_deps="ni_quadra"
+overlay_ni_quadra_filter_deps="ni_quadra"
+pad_ni_quadra_filter_deps="ni_quadra"
+roi_ni_quadra_filter_deps="ni_quadra"
+rotate_ni_quadra_filter_deps="ni_quadra"
+scale_ni_quadra_filter_deps="ni_quadra"
+split_ni_quadra_filter_deps="ni_quadra"
+xstack_ni_quadra_filter_deps="ni_quadra"
+hwupload_ni_logan_filter_deps="ni_logan"
+ai_pre_ni_quadra_filter_deps="ni_quadra"
+delogo_ni_quadra_filter_deps="ni_quadra"
+merge_ni_quadra_filter_deps="ni_quadra"
+
 aac_mf_encoder_deps="mediafoundation"
 ac3_mf_encoder_deps="mediafoundation"
 av1_cuvid_decoder_deps="cuvid CUVIDAV1PICPARAMS"
@@ -3395,6 +3418,18 @@ libx264_encoder_select="atsc_a53"
 libx264rgb_encoder_deps="libx264"
 libx264rgb_encoder_select="libx264_encoder"
 libx265_encoder_deps="libx265"
+h264_ni_quadra_decoder_deps="ni_quadra"
+h265_ni_quadra_decoder_deps="ni_quadra"
+jpeg_ni_quadra_decoder_deps="ni_quadra"
+vp9_ni_quadra_decoder_deps="ni_quadra"
+av1_ni_quadra_encoder_deps="ni_quadra"
+h264_ni_quadra_encoder_deps="ni_quadra"
+h265_ni_quadra_encoder_deps="ni_quadra"
+jpeg_ni_quadra_encoder_deps="ni_quadra"
+h264_ni_logan_decoder_deps="ni_logan"
+h265_ni_logan_decoder_deps="ni_logan"
+h264_ni_logan_encoder_deps="ni_logan"
+h265_ni_logan_encoder_deps="ni_logan"
 libx265_encoder_select="atsc_a53"
 libxavs_encoder_deps="libxavs"
 libxavs2_encoder_deps="libxavs2"
@@ -3726,6 +3761,7 @@ scale_filter_deps="swscale"
 scale_qsv_filter_deps="libmfx"
 scale_qsv_filter_select="qsvvpp"
 scdet_filter_select="scene_sad"
+sdl_ni_quadra_filter_deps="ni_quadra swscale sdl2"
 select_filter_select="scene_sad"
 sharpness_vaapi_filter_deps="vaapi"
 showcqt_filter_deps="avformat swscale"
@@ -3828,7 +3864,7 @@ swscale_suggest="libm stdatomic"
 
 avcodec_extralibs="pthreads_extralibs iconv_extralibs dxva2_extralibs lcms2_extralibs"
 avfilter_extralibs="pthreads_extralibs"
-avutil_extralibs="d3d11va_extralibs nanosleep_extralibs pthreads_extralibs vaapi_drm_extralibs vaapi_x11_extralibs vdpau_x11_extralibs"
+avutil_extralibs="d3d11va_extralibs nanosleep_extralibs pthreads_extralibs vaapi_drm_extralibs vaapi_x11_extralibs vdpau_x11_extralibs ni_quadra_extralibs"
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat threads"
@@ -6547,6 +6583,10 @@ powf_args=2
 for func in $MATH_FUNCS; do
     eval check_mathfunc $func \${${func}_args:-1} $libm_extralibs
 done
+
+# Check Netint driver dependencies
+enabled ni_quadra && check_pkg_config ni_quadra xcoder ni_device_api.h ni_device_open || disable ni_quadra
+enabled ni_logan && check_pkg_config ni_logan xcoder_logan ni_device_api_logan.h ni_logan_device_open || disable ni_logan
 
 # these are off by default, so fail if requested and not available
 enabled avisynth          && { require_headers "avisynth/avisynth_c.h avisynth/avs/version.h" &&

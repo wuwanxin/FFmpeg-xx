@@ -116,12 +116,22 @@ typedef struct H264SEIGreenMetaData {
     uint16_t xsd_metric_value;
 } H264SEIGreenMetaData;
 
+#if CONFIG_NI_LOGAN
+typedef struct H264SEINICustom {
+    int type;
+    AVBufferRef *buf_ref;
+} H264SEINICustom;
+#endif
+
 typedef struct H264SEIContext {
     H2645SEI common;
     H264SEIPictureTiming picture_timing;
     H264SEIRecoveryPoint recovery_point;
     H264SEIBufferingPeriod buffering_period;
     H264SEIGreenMetaData green_metadata;
+#if CONFIG_NI_LOGAN
+    H264SEINICustom ni_custom; // NETINT: NI AVC custom SEI
+#endif
 } H264SEIContext;
 
 struct H264ParamSets;

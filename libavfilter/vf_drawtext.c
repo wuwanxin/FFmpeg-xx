@@ -943,6 +943,9 @@ static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char 
         new->reinit = 1;
 
         ctx->priv = old;
+        // NETINT/FFmpeg-patch:
+        // fix memory leak for ffmpeg while using this function 
+        av_opt_free(old); 
         uninit(ctx);
         av_freep(&old);
 

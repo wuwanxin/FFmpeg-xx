@@ -602,7 +602,6 @@ not_ready:
     return FFERROR_NOT_READY;
 
 eof:
-    pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
     ff_outlink_set_status(outlink, status, pts);
     return 0;
 }
