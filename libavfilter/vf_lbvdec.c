@@ -81,7 +81,7 @@ enum var_name {
     VAR_VARS_NB
 };
 
-typedef struct CropContext {
+typedef struct LbvdecContext {
     const AVClass *class;
 
     int  roi_x;             ///< x offset of the roi area 
@@ -97,7 +97,7 @@ typedef struct CropContext {
     char *x_expr, *y_expr, *w_expr, *h_expr;
     AVExpr *x_pexpr, *y_pexpr;  /* parsed expressions for x and y */
     double var_values[VAR_VARS_NB];
-} CropContext;
+} LbvdecContext;
 
 typedef struct ThreadData {
     AVFrame *in, *out;
@@ -228,7 +228,7 @@ static int frame_process_video(AVFilterContext *ctx,AVFrame *dst, const AVFrame 
 static int do_conversion(AVFilterContext *ctx, void *arg, int jobnr,
                         int nb_jobs)
 {
-    CropContext *privCtx = ctx->priv;
+    LbvdecContext *privCtx = ctx->priv;
     ThreadData *td = arg;
     AVFrame *dst = td->out;
     AVFrame *src = td->in;
@@ -257,7 +257,7 @@ static int query_formats(AVFilterContext *ctx)
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    CropContext *s = ctx->priv;
+    LbvdecContext *s = ctx->priv;
 
     av_expr_free(s->x_pexpr);
     s->x_pexpr = NULL;
@@ -283,7 +283,7 @@ static inline int normalize_double(int *n, double d)
 static int config_input(AVFilterLink *link)
 {
     AVFilterContext *ctx = link->dst;
-    CropContext *s = ctx->priv;
+    LbvdecContext *s = ctx->priv;
     const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(link->format);
     int ret;
     const char *expr;
@@ -392,7 +392,7 @@ fail_expr:
 static int config_output(AVFilterLink *link)
 {
     AVFilterContext *ctx = link->src;
-    CropContext *s = link->src->priv;
+    LbvdecContext *s = link->src->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
 
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
@@ -416,72 +416,7 @@ static int config_output(AVFilterLink *link)
 
 static int filter_frame(AVFilterLink *link, AVFrame *frame)
 {
-#if 0
-    AVFilterContext *ctx = link->dst;
-    CropContext *s = ctx->priv;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
-    int i;
 
-    s->var_values[VAR_N] = link->frame_count_out;
-    s->var_values[VAR_T] = frame->pts == AV_NOPTS_VALUE ?
-        NAN : frame->pts * av_q2d(link->time_base);
-#if FF_API_FRAME_PKT
-FF_DISABLE_DEPRECATION_WARNINGS
-    s->var_values[VAR_POS] = frame->pkt_pos == -1 ?
-        NAN : frame->pkt_pos;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-    s->var_values[VAR_X] = av_expr_eval(s->x_pexpr, s->var_values, NULL);
-    s->var_values[VAR_Y] = av_expr_eval(s->y_pexpr, s->var_values, NULL);
-    /* It is necessary if x is expressed from y  */
-    s->var_values[VAR_X] = av_expr_eval(s->x_pexpr, s->var_values, NULL);
-
-    normalize_double(&s->x, s->var_values[VAR_X]);
-    normalize_double(&s->y, s->var_values[VAR_Y]);
-
-    if (s->x < 0)
-        s->x = 0;
-    if (s->y < 0)
-        s->y = 0;
-    if ((unsigned)s->x + (unsigned)s->w > link->w)
-        s->x = link->w - s->w;
-    if ((unsigned)s->y + (unsigned)s->h > link->h)
-        s->y = link->h - s->h;
-
-    av_log(ctx, AV_LOG_TRACE, "n:%d t:%f x:%d y:%d x+w:%d y+h:%d\n",
-            (int)s->var_values[VAR_N], s->var_values[VAR_T],
-            s->x, s->y, s->x+s->w, s->y+s->h);
-
-    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
-        frame->crop_top   += s->y;
-        frame->crop_left  += s->x;
-        frame->crop_bottom = frame->height - frame->crop_top - frame->crop_bottom - s->h;
-        frame->crop_right  = frame->width  - frame->crop_left - frame->crop_right - s->w;
-    } else {
-        frame->width  = s->w;
-        frame->height = s->h;
-
-        frame->data[0] += s->y * frame->linesize[0];
-        frame->data[0] += s->x * s->max_step[0];
-
-        if (!(desc->flags & AV_PIX_FMT_FLAG_PAL)) {
-            for (i = 1; i < 3; i ++) {
-                if (frame->data[i]) {
-                    frame->data[i] += (s->y >> s->vsub) * frame->linesize[i];
-                    frame->data[i] += (s->x * s->max_step[i]) >> s->hsub;
-                }
-            }
-        }
-
-        /* alpha plane */
-        if (frame->data[3]) {
-            frame->data[3] += s->y * frame->linesize[3];
-            frame->data[3] += s->x * s->max_step[3];
-        }
-    }
-
-    return ff_filter_frame(link->dst->outputs[0], frame);
-#else
     av_log(NULL, AV_LOG_WARNING, "### chenxf filter_frame, link %x, frame %x \n", link, frame);
     AVFilterContext *avctx = link->dst;
     AVFilterLink *outlink = avctx->outputs[0];
@@ -514,13 +449,13 @@ else
     av_frame_free(&frame);
 
     return ff_filter_frame(outlink, out);
-#endif
+
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    CropContext *s = ctx->priv;
+    LbvdecContext *s = ctx->priv;
     int ret;
 
     if (   !strcmp(cmd, "out_w")  || !strcmp(cmd, "w")
@@ -553,7 +488,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
-#define OFFSET(x) offsetof(CropContext, x)
+#define OFFSET(x) offsetof(LbvdecContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 #define TFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
@@ -590,7 +525,7 @@ static const AVFilterPad avfilter_vf_crop_outputs[] = {
 const AVFilter ff_vf_lbvdec = {
     .name            = "lbvdec",
     .description     = NULL_IF_CONFIG_SMALL("lbvdec process the input video."),
-    .priv_size       = sizeof(CropContext),
+    .priv_size       = sizeof(LbvdecContext),
     .priv_class      = &lbvdec_class,
     .uninit          = uninit,
     FILTER_INPUTS(avfilter_vf_crop_inputs),
