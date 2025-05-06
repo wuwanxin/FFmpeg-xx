@@ -99,8 +99,8 @@ static int init_merge_context(MergeContext *ctx,LowBitrateEncoderUHSContext *lb_
 }
 
 static void add_frame_header(MergeContext *ctx) {
-    *(ctx->merged_packet->data+PKT_COUNT_POS_H) = (ctx->pkt_count+1) & 0xFF00;
-    *(ctx->merged_packet->data+PKT_COUNT_POS_L) = (ctx->pkt_count+1) & 0x00FF; 
+    *(ctx->merged_packet->data+PKT_COUNT_POS_H) = (ctx->pkt_count) & 0xFF00;
+    *(ctx->merged_packet->data+PKT_COUNT_POS_L) = (ctx->pkt_count) & 0x00FF; 
 }
 
 // Add a single AVPacket to the merged AVPacket
@@ -319,7 +319,7 @@ static int base_encode_function(AVCodecContext *basectx, AVFrame *frame, AVPacke
         if (((*pkt)->size > 0) && ((*pkt)->data)) {
             av_log( basectx,AV_LOG_DEBUG,"baseenc avcodec_receive_packet key:%d\n",((*pkt)->flags & AV_PKT_FLAG_KEY));
             //ping - pong
-#if 1
+#if 0
             static FILE *base_bin_fp;
             if(!base_bin_fp) base_bin_fp = fopen("testout/base_str.bin","wb");
             if(base_bin_fp){
@@ -416,6 +416,8 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
         //use x264
         //ban scenecut
 	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params", "scenecut=0", 0);
+    }else{
+        return -1;
     }
 	
 

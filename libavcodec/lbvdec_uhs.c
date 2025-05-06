@@ -17,7 +17,9 @@
 #include "atsc_a53.h"
 #include "sei.h"
 #include "lbvenc.h"
-
+#include "h2645_parse.h"
+#include "h264.h"
+#include "decode.h"
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -39,9 +41,9 @@ typedef struct {
 	int set_blk_h;
 	int num_blk;
 
-    // baseenc_ctx
-    AVCodecContext *baseenc_ctx; 
-	
+    // basedec_ctx
+    AVCodecContext *basedec_ctx; 
+	enum AVCodecID base_codec_id;
 	
 	int counter;
 
@@ -65,10 +67,48 @@ static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
     fclose(file);
 }
 
+static int __lbvdec_uhs_init_basecodec(LowBitrateDecoderUHSContext *ctx) {
+    AVCodec *basedec_codec;
+    enum AVCodecID base_codec_id = ctx->base_codec_id;
+    #ifdef __Xilinx_ZCU106__
+    //zcu106 use hw codec by openmax
+    if(base_codec_id == AV_CODEC_ID_H264){
+        basedec_codec = avcodec_find_encoder_by_name("h264_omx");
+    }else{
+        av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
+        return AVERROR_UNKNOWN;
+    }
+#else
+    basedec_codec = avcodec_find_decoder(base_codec_id);
+    if (!basedec_codec) {
+        return AVERROR_UNKNOWN;
+    }
+#endif
+    ctx->basedec_ctx = avcodec_alloc_context3(basedec_codec);
+    if (!ctx->basedec_ctx) {
+        return AVERROR(ENOMEM);
+    }
+    
+    //init baseenc ctx
+   
+    ctx->basedec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    
+    if (avcodec_open2(ctx->basedec_ctx, basedec_codec, NULL) < 0) {
+        avcodec_free_context(&ctx->basedec_ctx);
+        return AVERROR_UNKNOWN;
+    }
+    return 0;
+}
+
+static int __lbvdec_uhs_free_basecodec(LowBitrateDecoderUHSContext *ctx){
+    avcodec_free_context(&ctx->basedec_ctx);
+    return 0;
+}
+
 static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
     enum AVCodecID base_codec_id;
-    AVCodec *basedec_codec;
-
+    
+    int ret;
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init enter! \n");
     LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
     // init encoders
@@ -99,33 +139,7 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
     }
     av_log(avctx, AV_LOG_DEBUG,"base_codec_id %d \n",base_codec_id);
     
-#ifdef __Xilinx_ZCU106__
-    //zcu106 use hw codec by openmax
-    if(base_codec_id == AV_CODEC_ID_H264){
-        basedec_codec = avcodec_find_encoder_by_name("h264_omx");
-    }else{
-        av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
-        return AVERROR_UNKNOWN;
-    }
-#else
-    basedec_codec = avcodec_find_decoder(base_codec_id);
-    if (!basedec_codec) {
-        return AVERROR_UNKNOWN;
-    }
-#endif
-    ctx->baseenc_ctx = avcodec_alloc_context3(basedec_codec);
-    if (!ctx->baseenc_ctx) {
-        return AVERROR(ENOMEM);
-    }
-    
-    //init baseenc ctx
-   
-    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    
-    if (avcodec_open2(ctx->baseenc_ctx, basedec_codec, NULL) < 0) {
-        avcodec_free_context(&basedec_codec);
-        return AVERROR_UNKNOWN;
-    }
+    ctx->base_codec_id = base_codec_id;
 
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init down! \n");
     return 0;
@@ -143,6 +157,7 @@ static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, 
     big_frame->width = width;
     big_frame->height = height;
     big_frame->format = AV_PIX_FMT_YUV420P;
+    big_frame->key_frame = 1;
 
     if (av_frame_get_buffer(big_frame, 32) < 0) {
         fprintf(stderr, "Could not allocate big frame data\n");
@@ -152,49 +167,37 @@ static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, 
 
     int num_x_blocks = (width + blk_w - 1) / blk_w; // Ensure rounding up
     int num_y_blocks = (height + blk_h - 1) / blk_h; // Ensure rounding up
+    // Check if small frame exists
+    if ((num_x_blocks*num_y_blocks) < num_frames) {
+        
+    }
 
+    // Copy Y data
+    
     for (int y = 0; y < num_y_blocks; y++) {
-        for (int x = 0; x < num_x_blocks; x++) {
-            // Calculate the index of the small frame
-            int small_frame_index = y * num_x_blocks + x;
-
-            // Check if small frame exists
-            if (small_frame_index < num_frames) {
-                AVFrame* small_frame = small_frames[small_frame_index];
-
-                // Copy Y data
-                for (int j = 0; j < blk_h; j++) {
-                    for (int i = 0; i < blk_w; i++) {
-                        int dest_x = x * blk_w + i;
-                        int dest_y = y * blk_h + j;
-                        if (dest_x < width && dest_y < height) {
-                            // Check bounds and copy Y
-                            big_frame->data[0][dest_y * big_frame->linesize[0] + dest_x] =
-                                small_frame->data[0][j * small_frame->linesize[0] + i];
-                        }
-                    }
-                }
-
-                // Copy U and V data (each has half the vertical and horizontal resolution)
-                for (int j = 0; j < (blk_h + 1) / 2; j++) {
-                    for (int i = 0; i < (blk_w + 1) / 2; i++) {
-                        int dest_x = x * (blk_w / 2) + i; // U/V blocks are half the width
-                        int dest_y = y * (blk_h / 2) + j;
-                        if (dest_x < (width / 2) && dest_y < (height / 2)) {
-                            // Check bounds and copy U
-                            big_frame->data[1][dest_y * big_frame->linesize[1] + dest_x] =
-                                small_frame->data[1][j * small_frame->linesize[1] + i];
-
-                            // Check bounds and copy V
-                            big_frame->data[2][dest_y * big_frame->linesize[2] + dest_x] =
-                                small_frame->data[2][j * small_frame->linesize[2] + i];
-                        }
-                    }
-                }
+        for(int i = 0;i<blk_h;i++){
+            for (int x = 0; x < num_x_blocks; x++) {
+                AVFrame* small_frame = small_frames[y * num_x_blocks + x];
+                // Copy Y data line
+                int line_offset = ((y*blk_h)+i)*(num_x_blocks*small_frame->linesize[0]);
+                memcpy(big_frame->data[0]+line_offset+(x*small_frame->linesize[0]),small_frame->data[0]+(i*small_frame->linesize[0]),small_frame->linesize[0]);
+        
             }
         }
     }
-
+    // Copy U V data
+    for (int y = 0; y < num_y_blocks; y++) {
+        for(int i = 0;i<blk_h/2;i++){
+            for (int x = 0; x < num_x_blocks; x++) {
+                AVFrame* small_frame = small_frames[y * num_x_blocks + x];
+                // Copy Y data line
+                int line_offset = ((y*blk_h/2)+i)*(num_x_blocks*small_frame->linesize[1]);
+                memcpy(big_frame->data[1]+line_offset+(x*small_frame->linesize[1]),small_frame->data[1]+(i*small_frame->linesize[1]),small_frame->linesize[1]);
+                memcpy(big_frame->data[2]+line_offset+(x*small_frame->linesize[2]),small_frame->data[2]+(i*small_frame->linesize[2]),small_frame->linesize[2]);
+        
+            }
+        }
+    }
     return big_frame;
 }
 
@@ -253,8 +256,8 @@ static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_fra
 }
 
 // Function to crop a YUV420P frame
-static AVFrame* crop_yuv420p_frame(AVFrame* frame, int x, int y, int crop_width, int crop_height) {
-    AVFrame* cropped_frame = av_frame_alloc();
+static int crop_yuv420p_frame(AVCodecContext *avctx, AVFrame* frame, AVFrame* cropped_frame, int x, int y, int crop_width, int crop_height) {
+    //cropped_frame = av_frame_alloc();
     if (!cropped_frame) {
         fprintf(stderr, "Could not allocate cropped frame\n");
         return NULL;
@@ -264,9 +267,10 @@ static AVFrame* crop_yuv420p_frame(AVFrame* frame, int x, int y, int crop_width,
     cropped_frame->width = crop_width;
     cropped_frame->height = crop_height;
     cropped_frame->format = AV_PIX_FMT_YUV420P;
+    cropped_frame->key_frame = frame->key_frame;
 
     // Allocate buffer for the cropped frame
-    if (av_frame_get_buffer(cropped_frame, 32) < 0) {
+    if (ff_get_buffer(avctx,cropped_frame, 0) < 0) {
         fprintf(stderr, "Could not allocate frame data for cropped frame\n");
         av_frame_free(&cropped_frame);
         return NULL;
@@ -275,33 +279,81 @@ static AVFrame* crop_yuv420p_frame(AVFrame* frame, int x, int y, int crop_width,
     // Copy Y data
     for (int h = 0; h < crop_height; h++) {
         memcpy(cropped_frame->data[0] + h * cropped_frame->linesize[0],
-               frame->data[0] + (y + h) * frame->linesize[0] + x,
+               frame->data[0] + (h * frame->linesize[0]) ,
                crop_width);
     }
 
-    // Copy U data
-    for (int h = 0; h < (crop_height + 1) / 2; h++) {
-        memcpy(cropped_frame->data[1] + h * cropped_frame->linesize[1],
-               frame->data[1] + ((y + h) / 2) * frame->linesize[1] + (x / 2),
-               (crop_width + 1) / 2);
+    // Copy U V data
+    for (int h = 0; h < (crop_height) / 2; h++) {
+        memcpy(cropped_frame->data[1] + (h * cropped_frame->linesize[1]), frame->data[1] + (h * frame->linesize[1]) ,cropped_frame->linesize[1]);
+        memcpy(cropped_frame->data[2] + (h * cropped_frame->linesize[2]), frame->data[2] + (h * frame->linesize[2]) ,cropped_frame->linesize[2]);
     }
 
-    // Copy V data
-    for (int h = 0; h < (crop_height + 1) / 2; h++) {
-        memcpy(cropped_frame->data[2] + h * cropped_frame->linesize[2],
-               frame->data[2] + ((y + h) / 2) * frame->linesize[2] + (x / 2),
-               (crop_width + 1) / 2);
-    }
-
-    return cropped_frame;
+    return 0;
 }
 
+static void __debug_dump_frame(AVFrame *frame, const char *filename) {
+    FILE *file = fopen(filename, "wb");
+    if (!file) {
+        fprintf(stderr, "Could not open %s for writing\n", filename);
+        return;
+    }
+
+    switch (frame->format) {
+        case AV_PIX_FMT_YUV420P: {
+            // Handle YUV420P format
+            // Write Y component
+            fwrite(frame->data[0], 1, frame->linesize[0] * frame->height, file);
+            // Write U component
+            fwrite(frame->data[1], 1, frame->linesize[1] * (frame->height / 2), file);
+            // Write V component
+            fwrite(frame->data[2], 1, frame->linesize[2] * (frame->height / 2), file);
+            break;
+        }
+        case AV_PIX_FMT_NV12: {
+            // Handle NV12 format
+            for (int y = 0; y < frame->height; y++) {
+                fwrite(frame->data[0] + y * frame->linesize[0], 1, frame->width, file); // Y plane
+            }
+            for (int y = 0; y < frame->height / 2; y++) {
+                fwrite(frame->data[1] + y * frame->linesize[1], 1, frame->width, file); // UV plane
+            }
+            break;
+        }
+        case AV_PIX_FMT_RGB24: {
+            // Handle RGB24 format
+            for (int y = 0; y < frame->height; y++) {
+                fwrite(frame->data[0] + y * frame->linesize[0], 1, frame->width * 3, file); // RGB plane
+            }
+            break;
+        }
+        // Additional format handling can be implemented as needed
+        default:
+            fprintf(stderr, "Unsupported pixel format: %d\n", frame->format);
+            break;
+    }
+
+    fclose(file);
+}
 static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
     int *got_frame, AVPacket *avpkt) {
     LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
+    AVCodecContext *basedec_ctx = NULL;
     int ret ;
 	int current_count;
     fprintf(stderr, "lbvdec_uhs_decode enter\n");
+    
+    *got_frame = 0;
+    if(!avpkt->data || (avpkt->size <= 0) ){
+        return 0;
+    }
+
+    ret = __lbvdec_uhs_init_basecodec(ctx);
+    if(ret < 0){
+        return ret;
+    }
+    basedec_ctx = ctx->basedec_ctx;
+
 #if 0
     static FILE *base_bin_fp;
     if(!base_bin_fp) base_bin_fp = fopen("testout/base_str_rx.bin","wb");
@@ -311,67 +363,146 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
     }
     //av_usleep(10000000);
 #endif
-    *got_frame = 0;
-    ret = avcodec_send_packet(avctx, avpkt);
+    H2645Packet h264_pkts;
+    memset(&h264_pkts,0x0,sizeof(H2645Packet));
+    ret = ff_h2645_packet_split(&h264_pkts, avpkt->data, avpkt->size, avctx, 0, 0 ,AV_CODEC_ID_H264, 0, 0);
     if (ret < 0) {
-        fprintf(stderr, "Dec error happened.\n");
-        return -1; 
+        av_log(avctx, AV_LOG_ERROR,"Error splitting the input into NAL units.\n");
+        return ret;
     }
-    AVFrame *decoded_frame = av_frame_alloc();
-    ret = avcodec_receive_frame(avctx, decoded_frame);
-    if (ret < 0) {
-        fprintf(stderr, "Dec receive frame error happened.\n");
-        return 0; 
-    }else{
-        *got_frame = 1;
-    }
-    AVFrame** blks = av_malloc(ctx->num_blk * sizeof(AVFrame*));
+	
+	AVFrame** blks = av_malloc(ctx->num_blk * sizeof(AVFrame*));
     current_count = ctx->counter;
-	// Add a frame and check the return value
-    if (add_yuv420p_frame(decoded_frame, blks, ctx->num_blk, &current_count)) {
-        printf("Successfully filled the small frame array.\n");
-    } else {
-        printf("Added a frame but not full yet.\n");
-		*got_frame = 0;
-		goto end;
+    AVFrame *decoded_frame = av_frame_alloc();
+    AVPacket *spkt = NULL;
+    for (int i = 0; i < (h264_pkts.nb_nals + 1); i++) {
+        if(i < h264_pkts.nb_nals){
+            H2645NAL *nal = &h264_pkts.nals[i];
+            
+            if(!spkt){
+                spkt = av_packet_alloc();
+                av_init_packet(spkt);
+                av_new_packet(spkt, 1024 * 1024);
+                spkt->size = 0;
+            }
+            int found_data = 0;
+            
+            switch (nal->type) {
+                case H264_NAL_IDR_SLICE:
+                case H264_NAL_SLICE:
+                    found_data = 1;
+                default:
+                    *(spkt->data + spkt->size) = 0x0;
+                    *(spkt->data + spkt->size + 1) = 0x0;
+                    *(spkt->data + spkt->size + 2) = 0x0;
+                    *(spkt->data + spkt->size + 3) = 0x1;
+                    spkt->size += 4;
+                    memcpy(spkt->data + spkt->size, nal->raw_data, nal->raw_size);
+                    spkt->size += nal->raw_size;
+                    break;
+            }
+            
+            if(!found_data){
+                continue;
+            }
+    #if 0
+            static FILE *base_bin_fp_spl;
+            if(!base_bin_fp_spl) base_bin_fp_spl = fopen("testout/base_str_spl.bin","wb");
+            if(base_bin_fp_spl){
+                fwrite(spkt->data, 1, spkt->size , base_bin_fp_spl);
+                fflush(base_bin_fp_spl);
+            }
+            //continue;
+            //av_usleep(10000000);
+    #endif
+
+            ret = avcodec_send_packet(basedec_ctx, spkt);
+            if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
+                fprintf(stderr, "Dec error happened.\n");
+                return -1; 
+            }
+        }else{
+            //flush frame
+            ret = avcodec_send_packet(basedec_ctx, NULL);
+            if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
+                fprintf(stderr, "Dec error happened.\n");
+                return -1; 
+            }
+        }
+
+        
+
+        while( avcodec_receive_frame(basedec_ctx, decoded_frame) >= 0){
+            // Add a frame and check the return value
+#if 0//dump frames
+            static int frames = 1;
+            char filename[256];
+            snprintf(filename, sizeof(filename), "testout/output%d_recon_block_%d.yuv",frames, i);
+            __debug_dump_frame(decoded_frame, filename);
+            frames++;
+#endif
+            if (add_yuv420p_frame(decoded_frame, blks, ctx->num_blk, &current_count)) {
+                printf("Successfully filled the small frame array.\n");
+                // Assemble the small frames into a large frame
+                AVFrame *decoded_big_pict = assemble_yuv420p_frames(blks, current_count, ctx->set_blk_w, ctx->set_blk_h, 
+                                                                    (avctx->coded_width + (ctx->set_blk_w - 1)) / ctx->set_blk_w * ctx->set_blk_w , 
+                                                                    (avctx->coded_height + (ctx->set_blk_h - 1)) / ctx->set_blk_h * ctx->set_blk_h );
+                if (decoded_big_pict) {
+                    printf("Successfully assembled the big frame.\n");
+                    // Use decoded_big_pict for further processing
+                    // Define crop dimensions
+#if 0
+                    char filename2[256];
+                    snprintf(filename2, sizeof(filename2), "testout/decoded_big_pict_%d.yuv",frames);
+					__debug_dump_frame(decoded_big_pict,filename2);
+#endif
+                    int crop_x = decoded_big_pict->width; // X coordinate of the crop start
+                    int crop_y = decoded_big_pict->height; // Y coordinate of the crop start
+                    int crop_width = avctx->width; // Desired crop width
+                    int crop_height = avctx->height; // Desired crop height
+
+                    // Crop the big frame
+                    ret = crop_yuv420p_frame(avctx, decoded_big_pict, pict, crop_x, crop_y, crop_width, crop_height);
+                    if (ret < 0) {
+                        printf("Successfully cropped the frame to %dx%d.\n", crop_width, crop_height);
+                    }
+#if 0
+                    char filename3[256];
+                    snprintf(filename3, sizeof(filename3), "testout/decoded_big_pict_%d_cropped.yuv",frames);
+					__debug_dump_frame(pict,filename3);
+#endif
+                    av_frame_free(&decoded_big_pict); // Don't forget to free it after use
+
+                    if(current_count!=ctx->num_blk){
+                        printf("error!!!!!\n");
+                        *got_frame = 0;
+                    }else{
+                        *got_frame = 1;
+                    }
+                } else {
+                    printf("Failed to assemble the big frame.\n");
+                }
+            } else {
+                printf("Added a frame but not full yet.\n");
+            }
+        }
+		av_packet_free(&spkt);
+        spkt = NULL;
+
     }
+    if(decoded_frame) av_frame_free(decoded_frame);
 
-    *got_frame = 1;
-	if(current_count!=ctx->num_blk){
-		printf("error!!!!!\n");
-		goto end;
-	}
-	// Assemble the small frames into a large frame
-	AVFrame *decoded_big_pict = assemble_yuv420p_frames(blks, current_count, ctx->set_blk_w, ctx->set_blk_h, avctx->coded_width, avctx->coded_height);
-	if (decoded_big_pict) {
-		printf("Successfully assembled the big frame.\n");
-		// Use decoded_big_pict for further processing
-		// Define crop dimensions
-		int crop_x = avctx->coded_width; // X coordinate of the crop start
-		int crop_y = avctx->coded_height; // Y coordinate of the crop start
-		int crop_width = avctx->width; // Desired crop width
-		int crop_height = avctx->width; // Desired crop height
-
-		// Crop the big frame
-		pict = crop_yuv420p_frame(decoded_big_pict, crop_x, crop_y, crop_width, crop_height);
-		if (pict) {
-			printf("Successfully cropped the frame to %dx%d.\n", crop_width, crop_height);
-		}
-
-		av_frame_free(&decoded_big_pict); // Don't forget to free it after use
-	} else {
-		printf("Failed to assemble the big frame.\n");
-	}
+	
 	// Free small frames
     for (int i = 0; i < current_count; i++) {
         av_frame_free(&blks[i]);
     }
     free(blks);
-	
+	__lbvdec_uhs_free_basecodec(ctx);
 
 
 end:
-	if(decoded_frame) av_frame_free(decoded_frame);
+	
     return 0;
     
 }

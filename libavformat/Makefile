@@ -641,6 +641,8 @@ OBJS-$(CONFIG_LIBGME_DEMUXER)            += libgme.o
 OBJS-$(CONFIG_LIBMODPLUG_DEMUXER)        += libmodplug.o
 OBJS-$(CONFIG_LIBOPENMPT_DEMUXER)        += libopenmpt.o
 OBJS-$(CONFIG_VAPOURSYNTH_DEMUXER)       += vapoursynth.o
+# nuhd add
+OBJS-$(CONFIG_LBVC_UHS_DEMUXER)          += lbvdec.o
 
 # protocols I/O
 OBJS-$(CONFIG_ASYNC_PROTOCOL)            += async.o

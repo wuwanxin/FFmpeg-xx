@@ -57,6 +57,18 @@ static int force_one_stream(AVFormatContext *s)
 }
 
 /* Note: Do not forget to add new entries to the Makefile as well. */
+#if CONFIG_LBVC_UHS_MUXER
+const FFOutputFormat ff_lbvc_uhs_muxer = {
+    .p.name            = "lbvc_uhs",
+    .p.long_name       = NULL_IF_CONFIG_SMALL("raw lbvc uhs"),
+    .p.extensions      = "uhs",
+    .p.audio_codec     = AV_CODEC_ID_NONE,
+    .p.video_codec     = AV_CODEC_ID_LBVC_UHS,
+    .init              = force_one_stream,
+    .write_packet      = ff_raw_write_packet,
+    .p.flags           = AVFMT_NOTIMESTAMPS,
+};
+#endif
 
 #if CONFIG_AC3_MUXER
 const FFOutputFormat ff_ac3_muxer = {

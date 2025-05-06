@@ -28,6 +28,9 @@
 #include "mux.h"
 
 /* (de)muxers */
+
+extern const AVInputFormat  ff_lbvc_uhs_demuxer;
+extern const FFOutputFormat ff_lbvc_uhs_muxer;
 extern const FFOutputFormat ff_a64_muxer;
 extern const AVInputFormat  ff_aa_demuxer;
 extern const AVInputFormat  ff_aac_demuxer;
