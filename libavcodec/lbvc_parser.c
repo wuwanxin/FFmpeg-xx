@@ -1,6 +1,7 @@
 #include "get_bits.h"
 #include "parser.h"
 #include "bytestream.h"
+#include "libavutil/opt.h"
 
 #define MAX_FRAME_BLK 200
 #define ALIGN(a,b) (((a) + ((b) - 1)) / (b) * (b))
@@ -141,6 +142,9 @@ static int lbvc_uhs_parse(AVCodecParserContext *s, AVCodecContext *avctx,
         } else{
             if(avctx->coded_width && (avctx->coded_width!=ALIGN(avctx->width,tmp))) lbvc_parser->error_pkt = 1;
             avctx->coded_width = ALIGN(avctx->width,tmp);//(avctx->width + (tmp - 1)) / tmp * tmp;
+			char option_value[32];
+			snprintf(option_value, sizeof(option_value), "%d", tmp);
+            av_opt_set(avctx->priv_data,"blk_w",option_value,0);
         }
         
         tmp = bytestream2_get_be16(&gbc);
@@ -150,6 +154,9 @@ static int lbvc_uhs_parse(AVCodecParserContext *s, AVCodecContext *avctx,
         }else{
             if(avctx->coded_height && (avctx->coded_height!=ALIGN(avctx->height,tmp))) lbvc_parser->error_pkt = 1;
             avctx->coded_height = ALIGN(avctx->height,tmp);
+			char option_value[32];
+			snprintf(option_value, sizeof(option_value), "%d", tmp);
+            av_opt_set(avctx->priv_data,"blk_h",option_value,0);
         }
         
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;

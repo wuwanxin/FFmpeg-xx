@@ -189,3 +189,48 @@ int lbvenc_enhance_data_opaque_preprocess(H2645SEILbvencEnhanceData lbvenc_enhan
     (*opaque) = nuhd_extradata_buffer;
     return 0;
 }
+
+#define SIDE_DATA_TYPE_BLOCK_SIZE 1 // Custom side data type
+
+
+
+int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) {
+    if (!block_size_data) {
+        av_log(logctx, AV_LOG_ERROR,"Invalid LBVC_UHS_DEC_SIDEDATA pointer\n");
+        return -1;
+    }
+
+    // Calculate the size needed for storage
+    size_t size = sizeof(LBVC_UHS_DEC_SIDEDATA);
+
+    // Allocate side data
+    AVPacketSideData *side_data = av_packet_new_side_data(pkt, SIDE_DATA_TYPE_BLOCK_SIZE, size);
+    if (!side_data) {
+        av_log(logctx, AV_LOG_ERROR, "Failed to allocate side data\n");
+        return -1;
+    }
+
+    // Copy the data to the side data
+    memcpy(side_data, block_size_data, size);
+
+    return 0;
+}
+
+int lbvc_read_dec_block_size_data(const AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) {
+    if (!block_size_data) {
+        av_log(logctx, AV_LOG_ERROR, "Invalid LBVC_UHS_DEC_SIDEDATA pointer\n");
+        return -1;
+    }
+
+    // Retrieve side data
+    size_t size = sizeof(LBVC_UHS_DEC_SIDEDATA);
+
+    AVPacketSideData *side_data = av_packet_get_side_data(pkt, SIDE_DATA_TYPE_BLOCK_SIZE,&size);
+    if (side_data && size == sizeof(LBVC_UHS_DEC_SIDEDATA)) {
+        memcpy(block_size_data, side_data, sizeof(LBVC_UHS_DEC_SIDEDATA));
+    } else {
+        av_log(logctx, AV_LOG_ERROR, "No valid side data found\n");
+        return -1;
+    }
+    return 0;
+}

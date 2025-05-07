@@ -113,8 +113,7 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
     LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
     // init encoders
     ctx->base_codec = 0; //defalut, now only support 264
-    ctx->set_blk_w = 1920;
-    ctx->set_blk_h = 1088;
+
     system("mkdir ./testout");
     
     av_log(avctx, AV_LOG_DEBUG,"yuv file loading...base_codec:%d \n",ctx->base_codec);
@@ -125,12 +124,6 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
     int _height = avctx->height;
     int _coded_width = avctx->coded_width;
     int _coded_height = avctx->coded_height;
-	av_log(avctx, AV_LOG_DEBUG,"yuv file _widthx_height:%dx%d blk _widthx_height:%dx%d \n",_width,_height,ctx->set_blk_w,ctx->set_blk_h);
-    if((ctx->set_blk_w==0) || (ctx->set_blk_h==0)){
-        return -1;
-    }
-	ctx->num_blk = ((_width + ( ctx->set_blk_w - 1 )) / ctx->set_blk_w) * ((_height + ( ctx->set_blk_h - 1 )) / ctx->set_blk_h);
-    av_log(avctx, AV_LOG_DEBUG,"yuv file num_blks %d \n",ctx->num_blk);
     
     //alloc
     base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(ctx->base_codec);
@@ -140,6 +133,8 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
     av_log(avctx, AV_LOG_DEBUG,"base_codec_id %d \n",base_codec_id);
     
     ctx->base_codec_id = base_codec_id;
+
+    ctx->num_blk = 0;
 
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init down! \n");
     return 0;
@@ -352,6 +347,22 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
     if(ret < 0){
         return ret;
     }
+
+    if(!ctx->num_blk){
+        if((ctx->set_blk_w==0) || (ctx->set_blk_h==0)){
+            LBVC_UHS_DEC_SIDEDATA data = {0};
+            if(lbvc_read_dec_block_size_data(avpkt,&data,avctx) < 0){
+                return -1;
+            }
+            ctx->set_blk_w = data.blk_w;
+            ctx->set_blk_h = data.blk_h;
+            avctx->coded_width = data.coded_w;
+            avctx->coded_height = data.coded_h;
+        }
+        ctx->num_blk = ((avctx->coded_width + ( ctx->set_blk_w - 1 )) / ctx->set_blk_w) * ((avctx->coded_height + ( ctx->set_blk_h - 1 )) / ctx->set_blk_h);
+        av_log(avctx, AV_LOG_DEBUG,"yuv file num_blks %d \n",ctx->num_blk);
+    }
+    
     basedec_ctx = ctx->basedec_ctx;
 
 #if 0
@@ -515,6 +526,21 @@ static av_cold int lbvdec_uhs_close(AVCodecContext *avctx) {
     return 0;
 }
 
+#define OFFSET(x) offsetof(LowBitrateDecoderUHSContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption lbvdec_uhs_options[] = {
+    {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 7680, VE, "set_blk_w"},
+    {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4320, VE, "set_blk_h"},
+    {NULL} // end flag
+};
+
+static const AVClass lbvdec_uhs_class = {
+    .class_name = "lbvdec_uhs",
+    .item_name  = av_default_item_name,
+    .option     = lbvdec_uhs_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 FFCodec ff_liblbvc_uhs_decoder = {
     .p.name           = "lbvdec_uhs",
     CODEC_LONG_NAME("libhqbo lbvenc Low Bitrate Video Decoder :: Version-Ultra High Resolution"),
@@ -526,6 +552,7 @@ FFCodec ff_liblbvc_uhs_decoder = {
     .close            = lbvdec_uhs_close,
     .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS,
+    .p.priv_class     = &lbvdec_uhs_class,
     .bsfs           = "nuhd_to_normal",
     .p.wrapper_name = "lbvdec_uhs",
 };

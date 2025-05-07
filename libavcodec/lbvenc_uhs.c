@@ -63,6 +63,7 @@ typedef struct {
     int h;
 	
     int set_bitrate;
+    int set_framerate;
 	int set_blk_w;
 	int set_blk_h;
 
@@ -392,12 +393,12 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     if (!ctx->baseenc_ctx) {
         return AVERROR(ENOMEM);
     }
-    
+
     //init baseenc ctx
     ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
     ctx->baseenc_ctx->width = ctx->set_blk_w;
     ctx->baseenc_ctx->height = ctx->set_blk_h;
-    ctx->baseenc_ctx->time_base = (AVRational){1, ctx->num_blk*4};
+    ctx->baseenc_ctx->time_base = (AVRational){1, ctx->num_blk * ctx->set_framerate};
     ctx->baseenc_ctx->gop_size = ctx->num_blk;
     ctx->baseenc_ctx->keyint_min = ctx->num_blk;
     ctx->baseenc_ctx->slice_count = 1;
@@ -405,6 +406,7 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     ctx->baseenc_ctx->has_b_frames = 1;
     ctx->baseenc_ctx->max_b_frames = 2;
     ctx->baseenc_ctx->thread_count = 1;
+    ctx->baseenc_ctx->framerate = (AVRational){ ctx->num_blk * ctx->set_framerate, 1};
 #ifdef __Xilinx_ZCU106__
     ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_NV12;
 #else
@@ -415,7 +417,9 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     if(strcmp(baseenc_codec->name,"libx264") == 0){
         //use x264
         //ban scenecut
-	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params", "scenecut=0", 0);
+        char params[10240];
+		snprintf(params, sizeof(params), "scenecut=0",NULL);
+	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
     }else{
         return -1;
     }
@@ -628,8 +632,8 @@ static void lbvc_uhs_flush(AVCodecContext *avctx)
 
 static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
     LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
-    // 清理编码器
-
+    
+    avcodec_free_context(&ctx->baseenc_ctx);
     return 0;
 }
 
@@ -637,6 +641,7 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption lbvc_uhs_options[] = {
     {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, 40000000, VE, "set_bitrate"},
+    {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_INT, {.i64 = 1}, 1, 5, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
     {NULL} // end flag

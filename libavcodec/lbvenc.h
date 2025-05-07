@@ -1,6 +1,7 @@
 #ifndef AVCODEC_LBVENC_H
 #define AVCODEC_LBVENC_H
 #include "bytestream.h"
+#include "packet.h"
 
 typedef struct H2645SEILbvencEnhanceData {
     int present;
@@ -21,4 +22,17 @@ int lbvenc_enhance_data_opaque_preprocess(H2645SEILbvencEnhanceData lbvenc_enhan
 
 enum AVCodecID lbvenc_common_trans_internal_base_codecid_to_codecid(int internal_id);
 int lbvenc_common_trans_codecid_to_internal_base_codecid(enum AVCodecID);
+
+
+typedef struct {
+    int blk_w; // Block width
+    int blk_h; // Block height
+    int coded_w;
+	int coded_h;
+} LBVC_UHS_DEC_SIDEDATA;
+
+int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx);
+
+int lbvc_read_dec_block_size_data(const AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) ;
+
 #endif

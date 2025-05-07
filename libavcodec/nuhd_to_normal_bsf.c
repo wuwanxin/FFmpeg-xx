@@ -60,6 +60,7 @@ static void dump_data_to_file(const uint8_t *buf,int buf_size, const char* filen
     fclose(file);
 }
 #define MAX_FRAME_BLK 200
+
 static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
 {   
     GetByteContext gb;
@@ -78,6 +79,11 @@ static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
     if (ret < 0)
         goto fail;
 
+    ret = av_packet_copy_props(out, in);
+    if (ret < 0){
+        av_log(ctx, AV_LOG_ERROR,"filter_uhs av_packet_copy_props error. \n");
+        goto fail;
+    }
 #if 0
     static int frames = 1;
     char filename[256];
@@ -93,19 +99,38 @@ static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
         count = (header & 0x0000ffff);
     }
     if((count > 0) && (count <= MAX_FRAME_BLK)){
-        bytestream2_skip(&gb,2);
-        bytestream2_skip(&gb,2);
-        bytestream2_skip(&gb,2);
-        bytestream2_skip(&gb,2);
+        //get param
+        int16_t tmp = 0;
+        int16_t w,h = 0;
+        LBVC_UHS_DEC_SIDEDATA data = {0};
+        w = bytestream2_get_be16(&gb);
+        h = bytestream2_get_be16(&gb);
+        
+        tmp = bytestream2_get_be16(&gb);
+        if(tmp <= 0){
+            av_log(ctx,AV_LOG_WARNING,"header err found. \n");
+        } else{
+            data.coded_w = FFALIGN(w,tmp);
+			data.blk_w = tmp;
+        }
+        
+        tmp = bytestream2_get_be16(&gb);
+        if(tmp <= 0){
+            av_log(ctx,AV_LOG_WARNING,"header err found. \n");
+        }else{
+            data.coded_h = FFALIGN(h,tmp);
+			data.blk_h = tmp;
+        }
+
+        if(lbvc_add_dec_block_size_data(out,&data,ctx) < 0){
+            goto fail; 
+        }
+
         bytestream2_copy_buffer(&pb, &gb, (in->size-(bytestream2_tell_p(&pb))));
         out->size = bytestream2_tell_p(&pb);
-        ret = av_packet_copy_props(out, in);
-        if (ret < 0){
-            av_log(ctx, AV_LOG_ERROR,"filter_uhs av_packet_copy_props error. \n");
-            goto fail;
-        }
+        
     }else{
-        av_log(ctx,AV_LOG_ERROR,"header error... \n");
+        av_log(ctx,AV_LOG_ERROR,"header error... num blk count(%d)\n",count);
         goto fail;
     }
     return 0;
@@ -375,6 +400,7 @@ static uint8_t fake_hevc_frame[] = {
     0x57, 0x34, 0x85, 0x46, 0x20, 0x14, 0xAB, 0x16, 
     0x1F, 0x60
 };
+
 static int filter_e2e(AVBSFContext *ctx, AVPacket *out)
 {
     unsigned second_field_offset = 0;
