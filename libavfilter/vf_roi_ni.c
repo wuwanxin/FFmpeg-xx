@@ -55,6 +55,7 @@
 #define MAX_DETECTIONS 3000
 
 #define out_roi_result 1
+bool g_roi_enable = true;
 
 typedef struct _ni_roi_network_layer {
     int32_t width;
@@ -553,10 +554,10 @@ static int ni_get_detections(void *ctx, ni_roi_network_t *network,
         rbox[rbox_num].cls        = od_results.results[i].cls_id;
         rbox[rbox_num].color      = 0;
         rbox[rbox_num].prob       = od_results.results[i].prop;
-        printf("=====prob:%f cls:%d left:%d right:%d top:%d bottom:%d=====\n", rbox[rbox_num].prob, rbox[rbox_num].cls, rbox[rbox_num].left, rbox[rbox_num].right, rbox[rbox_num].top, rbox[rbox_num].bottom );
+        //printf("=====prob:%f cls:%d left:%d right:%d top:%d bottom:%d=====\n", rbox[rbox_num].prob, rbox[rbox_num].cls, rbox[rbox_num].left, rbox[rbox_num].right, rbox[rbox_num].top, rbox[rbox_num].bottom );
         rbox_num++;  
     }
-    printf("rbox_num:%d\n", rbox_num);
+    //printf("rbox_num:%d\n", rbox_num);
     if (rbox_num == 0) {
         free(rbox);
         *roi_num = rbox_num;
@@ -953,6 +954,17 @@ static av_cold void ni_roi_uninit(AVFilterContext *ctx)
 
 static int ni_roi_output_config_props(AVFilterLink *outlink)
 {
+    if(g_roi_enable == false){
+        // 保持输出参数与输入一致
+        AVFilterLink *inlink = outlink->src->inputs[0];
+        
+        outlink->time_base = inlink->time_base;
+        outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
+        outlink->w = inlink->w;
+        outlink->h = inlink->h;
+        
+        return 0;
+    }
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = outlink->src->inputs[0];
     AVHWFramesContext *in_frames_ctx;
@@ -1072,8 +1084,8 @@ static int ni_read_roi(AVFilterContext *ctx, ni_session_data_io_t *p_dst_pkt,
     roi = (AVRegionOfInterest *)sd->data;
     roi_extra = (AVRegionOfInterestNetintExtra *)sd_roi_extra->data;
 
-//    FILE* fp = fopen("roi_result.txt","a");
-//    static count=0;
+    //FILE* fp = fopen("roi_result.txt","a");
+    //static count=0;
     for (i = 0; i < roi_num; i++) {
         roi[i].self_size = sizeof(*roi);
         roi[i].top       = roi_box[i].top;
@@ -1090,12 +1102,12 @@ static int ni_read_roi(AVFilterContext *ctx, ni_session_data_io_t *p_dst_pkt,
                roi[i].qoffset.num, roi[i].qoffset.den);
         
         //maqg_test
-  //      fprintf(fp, "drawbox=enable='eq(n,%d)':x=%d:y=%d:w=%d:h=%d:color=red@0.5,\\\n",
-  //          count,roi[i].left, roi[i].top, roi[i].right-roi[i].left,roi[i].bottom-roi[i].top);
+        //fprintf(fp, "drawbox=enable='eq(n,%d)':x=%d:y=%d:w=%d:h=%d:color=red@0.5,\\\n",
+        //    count,roi[i].left, roi[i].top, roi[i].right-roi[i].left,roi[i].bottom-roi[i].top);
         // usleep(100000);
     }
- //  count++;
- //   fclose(fp);
+    //count++;
+    //fclose(fp);
 
     // sleep(1);  // 睡眠 1 秒 //zjq add
     free(roi_box);
@@ -1227,6 +1239,25 @@ static int ni_roi_filter_frame(AVFilterLink *link, AVFrame *in)
 {
     AVFilterContext *ctx = link->dst;
     NetIntRoiContext *s  = ctx->priv;
+
+    g_roi_enable = true;
+    FILE *file = fopen("./roi_ctrl/switch.txt", "r");
+    if (file) {
+        float value;
+        if (fscanf(file, "%f", &value) == 1) {
+            fclose(file);
+            if (value == 0.0) {
+                g_roi_enable = false;
+                return ff_filter_frame(link->dst->outputs[0], in);
+            }
+            else if(value >= -1.0 && value <= 1.0){
+                s->qp_offset = av_d2q(value, 100);
+            }
+        } else {
+            fclose(file);
+        }
+    }
+
     AVFrame *out         = NULL;
     ni_roi_network_t *network;
     ni_retcode_t retval;
