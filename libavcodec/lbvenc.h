@@ -23,7 +23,8 @@ int lbvenc_enhance_data_opaque_preprocess(H2645SEILbvencEnhanceData lbvenc_enhan
 enum AVCodecID lbvenc_common_trans_internal_base_codecid_to_codecid(int internal_id);
 int lbvenc_common_trans_codecid_to_internal_base_codecid(enum AVCodecID);
 
-
+//uhs
+#define MAX_LBVC_UHS_BITRATE (40000000)
 typedef struct {
     int blk_w; // Block width
     int blk_h; // Block height

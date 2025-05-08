@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "bytestream.h"
-
+#define ALIGN(a,b) (((a) + ((b) - 1)) / (b) * (b))
 
 
 #define MAX_MERGE_BLK_PKTS_SIZE (40 * 1024 * 1024) // 4 MB
@@ -363,13 +363,13 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     //init uncompressed data context
     int _width = avctx->width;
     int _height = avctx->height;
-    int _coded_width = avctx->coded_width;
-    int _coded_height = avctx->coded_height;
+    int _coded_width = ALIGN(_width,ctx->set_blk_w);
+    int _coded_height = ALIGN(_height,ctx->set_blk_h);
     ctx->w = _width;
     ctx->h = _height;
 	av_log(avctx, AV_LOG_DEBUG,"yuv file _widthx_height:%dx%d blk _widthx_height:%dx%d \n",_width,_height,ctx->set_blk_w,ctx->set_blk_h);
     
-	ctx->num_blk = ((_width + ( ctx->set_blk_w - 1 )) / ctx->set_blk_w) * ((_height + ( ctx->set_blk_h - 1 )) / ctx->set_blk_h);
+	ctx->num_blk = (_coded_width  / ctx->set_blk_w) * (_coded_height  / ctx->set_blk_h);
     av_log(avctx, AV_LOG_DEBUG,"yuv file num_blks %d \n",ctx->num_blk);
     
     //alloc
@@ -418,7 +418,7 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
         //use x264
         //ban scenecut
         char params[10240];
-		snprintf(params, sizeof(params), "scenecut=0",NULL);
+		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
 	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
     }else{
         return -1;
@@ -463,10 +463,7 @@ static int lbvc_uhs_encode(AVCodecContext *avctx, AVPacket *pkt,
 		if(init_merge_context(merge_ctx,ctx) < 0){
 			return -1;
 		}
-	}
-	next_merge_ctx = (MergeContext *)av_malloc(sizeof(MergeContext));
-	if(init_merge_context(next_merge_ctx,ctx) < 0){
-		return -1;
+        ctx->last_merge_pkt = merge_ctx;
 	}
 	
 once:
@@ -545,7 +542,6 @@ once:
                     continue;
                 }
 
-                // ping - pong
                 if(!full_flag && (tmp_pkt->flags & AV_PKT_FLAG_KEY) && (curr->pkt_count>0)){
                     if(change_flag){
                         full_flag = 1;
@@ -554,7 +550,7 @@ once:
                     }
                     add_frame_header(curr);
                     
-                    av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",merge_ctx->merged_packet->size);
+                    av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
                     //malloc pkt
                     ret = av_new_packet(pkt , curr->merged_packet->size);
                     if(ret < 0){
@@ -569,15 +565,19 @@ once:
 
                     cleanup_merge_context(curr);
 
+                    next_merge_ctx = (MergeContext *)av_malloc(sizeof(MergeContext));
+                    if(init_merge_context(next_merge_ctx,ctx) < 0){
+                        return -1;
+                    }
                     curr = next_merge_ctx;
                     ctx->last_merge_pkt = next_merge_ctx;
 
 				}
                 
                 if(add_packet_to_merge(curr, tmp_pkt) < 0){
-                    av_log(avctx, AV_LOG_ERROR,"add_packet_to_merge err, curr 0x%08x \n",curr);
+                    av_log(avctx, AV_LOG_ERROR,"add_packet_to_merge err, curr 0x%08x , err at %d blk\n",curr,curr->pkt_count);
                 }else{
-                    av_log(avctx, AV_LOG_DEBUG,"add_packet_to_merge down, curr 0x%08x \n",curr);
+                    av_log(avctx, AV_LOG_DEBUG,"add_packet_to_merge down, curr 0x%08x , now save %d blks \n",curr,curr->pkt_count);
                 }
              
                 // Free the packet after use
@@ -597,11 +597,11 @@ once:
 	
 	if(*got_packet){
         
-        ctx->last_merge_pkt = next_merge_ctx;
+        //ctx->last_merge_pkt = next_merge_ctx;
 	}else{
         av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs  count:%d(ctx->num_blk:%d)\n",pkt->size,merge_ctx->pkt_count,ctx->num_blk);
 		
-        ctx->last_merge_pkt = merge_ctx;
+        //ctx->last_merge_pkt = merge_ctx;
         goto got_no_data;
     }
     
@@ -640,8 +640,8 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 #define OFFSET(x) offsetof(LowBitrateEncoderUHSContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption lbvc_uhs_options[] = {
-    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, 40000000, VE, "set_bitrate"},
-    {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_INT, {.i64 = 1}, 1, 5, VE, "set_framerate"},
+    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
+    {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_INT, {.i64 = 1}, 0.1, 5, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
     {NULL} // end flag

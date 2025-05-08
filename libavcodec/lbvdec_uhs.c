@@ -386,6 +386,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
     current_count = ctx->counter;
     AVFrame *decoded_frame = av_frame_alloc();
     AVPacket *spkt = NULL;
+    int found_counter = 0;
     for (int i = 0; i < (h264_pkts.nb_nals + 1); i++) {
         if(i < h264_pkts.nb_nals){
             H2645NAL *nal = &h264_pkts.nals[i];
@@ -393,7 +394,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
             if(!spkt){
                 spkt = av_packet_alloc();
                 av_init_packet(spkt);
-                av_new_packet(spkt, 1024 * 1024);
+                av_new_packet(spkt, MAX_LBVC_UHS_BITRATE/8);
                 spkt->size = 0;
             }
             int found_data = 0;
@@ -402,6 +403,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                 case H264_NAL_IDR_SLICE:
                 case H264_NAL_SLICE:
                     found_data = 1;
+                    found_counter++;
                 default:
                     *(spkt->data + spkt->size) = 0x0;
                     *(spkt->data + spkt->size + 1) = 0x0;
@@ -434,6 +436,10 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
             }
         }else{
             //flush frame
+            if(found_counter != ctx->num_blk){
+                av_log(avctx,AV_LOG_ERROR," not enough blks has been receieved. \n ");
+                return -1;
+            }
             ret = avcodec_send_packet(basedec_ctx, NULL);
             if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
                 fprintf(stderr, "Dec error happened.\n");

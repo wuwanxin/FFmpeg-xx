@@ -30,6 +30,7 @@
 #include "bytestream.h"
 #include "lbvenc.h"
 #include "libavutil/time.h"
+#define ALIGN(a,b) (((a) + ((b) - 1)) / (b) * (b))
 
 static av_cold int init(AVBSFContext *ctx)
 {
@@ -110,7 +111,7 @@ static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
         if(tmp <= 0){
             av_log(ctx,AV_LOG_WARNING,"header err found. \n");
         } else{
-            data.coded_w = FFALIGN(w,tmp);
+            data.coded_w = ALIGN(w,tmp);
 			data.blk_w = tmp;
         }
         
@@ -118,7 +119,7 @@ static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
         if(tmp <= 0){
             av_log(ctx,AV_LOG_WARNING,"header err found. \n");
         }else{
-            data.coded_h = FFALIGN(h,tmp);
+            data.coded_h = ALIGN(h,tmp);
 			data.blk_h = tmp;
         }
 
