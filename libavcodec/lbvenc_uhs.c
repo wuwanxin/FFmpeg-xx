@@ -63,7 +63,7 @@ typedef struct {
     int h;
 	
     int set_bitrate;
-    int set_framerate;
+    float set_framerate;
 	int set_blk_w;
 	int set_blk_h;
 
@@ -398,7 +398,7 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
     ctx->baseenc_ctx->width = ctx->set_blk_w;
     ctx->baseenc_ctx->height = ctx->set_blk_h;
-    ctx->baseenc_ctx->time_base = (AVRational){1, ctx->num_blk * ctx->set_framerate};
+    ctx->baseenc_ctx->time_base = (AVRational){1 , ctx->num_blk * ctx->set_framerate };
     ctx->baseenc_ctx->gop_size = ctx->num_blk;
     ctx->baseenc_ctx->keyint_min = ctx->num_blk;
     ctx->baseenc_ctx->slice_count = 1;
@@ -641,7 +641,7 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption lbvc_uhs_options[] = {
     {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
-    {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_INT, {.i64 = 1}, 0.1, 5, VE, "set_framerate"},
+    {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
     {NULL} // end flag
