@@ -46,8 +46,9 @@ typedef struct {
 
     int blk_w;
     int blk_h;
-    
 
+    int64_t creat_acctual_time;
+    
 } MergeContext;
 
 typedef struct {
@@ -74,7 +75,9 @@ typedef struct {
 	
 	MergeContext *last_merge_pkt;
 
-    //int pts;
+    int64_t pts; // Used to track the current PTS
+    int time_base; // Time base
+	
 } LowBitrateEncoderUHSContext;
 
 // Initialize the merge context
@@ -96,12 +99,35 @@ static int init_merge_context(MergeContext *ctx,LowBitrateEncoderUHSContext *lb_
     ctx->frame_h = lb_ctx->h;
     ctx->blk_w = lb_ctx->set_blk_w;
     ctx->blk_h = lb_ctx->set_blk_h;
+
     return 0;
 }
 
 static void add_frame_header(MergeContext *ctx) {
     *(ctx->merged_packet->data+PKT_COUNT_POS_H) = (ctx->pkt_count) & 0xFF00;
     *(ctx->merged_packet->data+PKT_COUNT_POS_L) = (ctx->pkt_count) & 0x00FF; 
+}
+
+static int frame_time_checking(MergeContext *ctx, float expect_framerate, void* logctx) {
+    // Get the current time in microseconds
+    int64_t actual_current_time = av_gettime(); 
+    // Calculate the actual time interval
+    int64_t actual_interval = actual_current_time - ctx->creat_acctual_time; 
+
+    // Calculate the expected time interval based on the expected frame rate (in microseconds)
+    int64_t expected_interval = (int64_t)(1000000.0f / expect_framerate); // Expected time interval per frame
+
+    // Set the threshold for time discrepancy (e.g., 100 milliseconds)
+    int64_t threshold = 100 * 1000; // Convert to microseconds
+
+    // Check the difference between actual time interval and expected time interval
+    if ((actual_interval - expected_interval) > threshold) {
+        av_log(logctx, AV_LOG_ERROR, "Time interval discrepancy detected: actual %lld microseconds, expected %lld microseconds.\n",
+            actual_interval, expected_interval);
+        return AVERROR(EINVAL); // Return error code for invalid argument
+    }
+
+    return 0; // Return success
 }
 
 // Add a single AVPacket to the merged AVPacket
@@ -136,6 +162,7 @@ static int add_packet_to_merge(MergeContext *ctx, AVPacket *pkt) {
         ctx->merged_packet->pts = pkt->pts; // Set PTS from the first packet
         ctx->merged_packet->dts = pkt->dts; // Set DTS from the first packet
         ctx->merged_packet->duration = pkt->duration; // Set duration from the first packet
+        ctx->creat_acctual_time = av_gettime(); // Get the current time in microseconds
         ctx->is_initialized = 1; // Mark as initialized
     } else {
         // Check if more space is needed, if so, reallocate
@@ -438,6 +465,9 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 down. \n");
 	
 	ctx->last_merge_pkt = NULL;
+	
+	// Set time base according to frame rate
+    ctx->time_base = 90000;  // Assume time base is 1/90000
 
     return 0;
 }
@@ -508,11 +538,13 @@ once:
             MergeContext *curr = merge_ctx;
 
 			// Cut the YUV420P frame
+            int64_t start_time = av_gettime(); 
 			AVFrame** output_frames = cut_yuv420p_frame(frame, blk_w, blk_h, &num_blocks);
 			if (!output_frames) {
 				goto err;
 			}
-            
+            int64_t cut_process_time = av_gettime() - start_time; 
+            av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame wait time:%lld\n",cut_process_time);
 			// Save each output frame to a file
 			for (int i = 0; i < num_blocks; i++) {
 #if 0//dump frames
@@ -550,11 +582,16 @@ once:
                     }
                     add_frame_header(curr);
                     
+                    ret = frame_time_checking(curr,ctx->set_framerate,ctx);
+                    if(ret < 0){
+                        av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
+                        return ret;
+                    }
                     av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
                     //malloc pkt
                     ret = av_new_packet(pkt , curr->merged_packet->size);
                     if(ret < 0){
-                        av_log(avctx, AV_LOG_DEBUG,"av_new_packet error\n");
+                        av_log(avctx, AV_LOG_ERROR,"av_new_packet error\n");
                         return ret;
                     }
                     av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs packet size:%d  count:%d(ctx->num_blk:%d)\n",pkt->size,merge_ctx->pkt_count,ctx->num_blk);
@@ -596,7 +633,16 @@ once:
     av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down \n");
 	
 	if(*got_packet){
-        
+        // Set timestamp
+		int64_t frame_interval = (int64_t)(ctx->time_base / ctx->set_framerate); // Calculate frame interval based on user-defined frame rate
+		// Set PTS and DTS
+		pkt->pts = ctx->pts; // Use the current PTS
+		pkt->dts = ctx->pts; // Picture is an key-frame, DTS set equal to PTS
+		pkt->duration = frame_interval; // Set the duration for each packet
+		pkt->stream_index = 0; // Set stream index
+		
+		// Update PTS
+		ctx->pts += frame_interval; // Increment timestamp
         //ctx->last_merge_pkt = next_merge_ctx;
 	}else{
         av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs  count:%d(ctx->num_blk:%d)\n",pkt->size,merge_ctx->pkt_count,ctx->num_blk);
