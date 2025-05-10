@@ -53,7 +53,7 @@ typedef struct {
 static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
     FILE* file = fopen(filename, "wb");
     if (!file) {
-        fprintf(stderr, "Could not open file %s for writing\n", filename);
+        av_log(NULL, AV_LOG_DEBUG, "Could not open file %s for writing\n", filename);
         return;
     }
 
@@ -136,16 +136,18 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
 
     ctx->num_blk = 0;
 
+    avctx->pix_fmt = AV_PIX_FMT_YUV420P;   
+
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init down! \n");
     return 0;
 }
 
 
 
-static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, int blk_w, int blk_h, int width, int height) {
+static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, int blk_w, int blk_h, int width, int height,void *logctx) {
     AVFrame* big_frame = av_frame_alloc();
     if (!big_frame) {
-        fprintf(stderr, "Could not allocate big frame\n");
+        av_log(logctx, AV_LOG_DEBUG, "Could not allocate big frame\n");
         return NULL;
     }
 
@@ -155,7 +157,7 @@ static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, 
     big_frame->key_frame = 1;
 
     if (av_frame_get_buffer(big_frame, 32) < 0) {
-        fprintf(stderr, "Could not allocate big frame data\n");
+        av_log(logctx, AV_LOG_DEBUG, "Could not allocate big frame data\n");
         av_frame_free(&big_frame);
         return NULL;
     }
@@ -196,7 +198,7 @@ static AVFrame* assemble_yuv420p_frames(AVFrame** small_frames, int num_frames, 
     return big_frame;
 }
 
-static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_frames, int* current_count) {
+static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_frames, int* current_count,void *logctx) {
     // Check if the maximum number of frames has been reached
     if (*current_count >= num_frames) {
         return 0; // Return 0, indicating failure to add
@@ -205,7 +207,7 @@ static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_fra
     // Allocate and copy data to a new small frame
     AVFrame* new_frame = av_frame_alloc();
     if (!new_frame) {
-        fprintf(stderr, "Could not allocate frame\n");
+        av_log(logctx, AV_LOG_DEBUG, "Could not allocate frame\n");
         return 0; // Return 0, indicating failure to add
     }
 
@@ -216,7 +218,7 @@ static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_fra
 
     // Allocate data buffer
     if (av_frame_get_buffer(new_frame, 32) < 0) {
-        fprintf(stderr, "Could not allocate frame data\n");
+        av_log(logctx, AV_LOG_DEBUG, "Could not allocate frame data\n");
         av_frame_free(&new_frame);
         return 0; // Return 0, indicating failure to add
     }
@@ -254,7 +256,7 @@ static int add_yuv420p_frame(AVFrame* frame, AVFrame** small_frames, int num_fra
 static int crop_yuv420p_frame(AVCodecContext *avctx, AVFrame* frame, AVFrame* cropped_frame, int x, int y, int crop_width, int crop_height) {
     //cropped_frame = av_frame_alloc();
     if (!cropped_frame) {
-        fprintf(stderr, "Could not allocate cropped frame\n");
+        av_log(avctx, AV_LOG_ERROR, "Could not allocate cropped frame\n");
         return NULL;
     }
 
@@ -266,7 +268,7 @@ static int crop_yuv420p_frame(AVCodecContext *avctx, AVFrame* frame, AVFrame* cr
 
     // Allocate buffer for the cropped frame
     if (ff_get_buffer(avctx,cropped_frame, 0) < 0) {
-        fprintf(stderr, "Could not allocate frame data for cropped frame\n");
+        av_log(avctx, AV_LOG_ERROR, "Could not allocate frame data for cropped frame\n");
         av_frame_free(&cropped_frame);
         return NULL;
     }
@@ -290,7 +292,7 @@ static int crop_yuv420p_frame(AVCodecContext *avctx, AVFrame* frame, AVFrame* cr
 static void __debug_dump_frame(AVFrame *frame, const char *filename) {
     FILE *file = fopen(filename, "wb");
     if (!file) {
-        fprintf(stderr, "Could not open %s for writing\n", filename);
+        av_log(NULL, AV_LOG_ERROR, "Could not open %s for writing\n", filename);
         return;
     }
 
@@ -324,7 +326,7 @@ static void __debug_dump_frame(AVFrame *frame, const char *filename) {
         }
         // Additional format handling can be implemented as needed
         default:
-            fprintf(stderr, "Unsupported pixel format: %d\n", frame->format);
+            av_log(NULL, AV_LOG_ERROR, "Unsupported pixel format: %d\n", frame->format);
             break;
     }
 
@@ -336,7 +338,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
     AVCodecContext *basedec_ctx = NULL;
     int ret ;
 	int current_count;
-    fprintf(stderr, "lbvdec_uhs_decode enter\n");
+    av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_decode enter\n");
     
     *got_frame = 0;
     if(!avpkt->data || (avpkt->size <= 0) ){
@@ -431,7 +433,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
 
             ret = avcodec_send_packet(basedec_ctx, spkt);
             if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
-                fprintf(stderr, "Dec error happened.\n");
+                av_log(avctx, AV_LOG_ERROR, "Dec error happened.\n");
                 return -1; 
             }
         }else{
@@ -442,7 +444,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
             }
             ret = avcodec_send_packet(basedec_ctx, NULL);
             if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
-                fprintf(stderr, "Dec error happened.\n");
+                av_log(avctx, AV_LOG_ERROR, "Dec error happened.\n");
                 return -1; 
             }
         }
@@ -458,14 +460,14 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
             __debug_dump_frame(decoded_frame, filename);
             frames++;
 #endif
-            if (add_yuv420p_frame(decoded_frame, blks, ctx->num_blk, &current_count)) {
-                printf("Successfully filled the small frame array.\n");
+            if (add_yuv420p_frame(decoded_frame, blks, ctx->num_blk, &current_count,avctx)) {
+                av_log(avctx, AV_LOG_DEBUG,"Successfully filled the small frame array.\n");
                 // Assemble the small frames into a large frame
                 AVFrame *decoded_big_pict = assemble_yuv420p_frames(blks, current_count, ctx->set_blk_w, ctx->set_blk_h, 
                                                                     (avctx->coded_width + (ctx->set_blk_w - 1)) / ctx->set_blk_w * ctx->set_blk_w , 
-                                                                    (avctx->coded_height + (ctx->set_blk_h - 1)) / ctx->set_blk_h * ctx->set_blk_h );
+                                                                    (avctx->coded_height + (ctx->set_blk_h - 1)) / ctx->set_blk_h * ctx->set_blk_h,avctx );
                 if (decoded_big_pict) {
-                    printf("Successfully assembled the big frame.\n");
+                    av_log(avctx, AV_LOG_DEBUG,"Successfully assembled the big frame.\n");
                     // Use decoded_big_pict for further processing
                     // Define crop dimensions
 #if 0
@@ -481,7 +483,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                     // Crop the big frame
                     ret = crop_yuv420p_frame(avctx, decoded_big_pict, pict, crop_x, crop_y, crop_width, crop_height);
                     if (ret < 0) {
-                        printf("Successfully cropped the frame to %dx%d.\n", crop_width, crop_height);
+                        av_log(avctx, AV_LOG_DEBUG,"Successfully cropped the frame to %dx%d.\n", crop_width, crop_height);
                     }
 #if 0
                     char filename3[256];
@@ -491,16 +493,16 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                     av_frame_free(&decoded_big_pict); // Don't forget to free it after use
 
                     if(current_count!=ctx->num_blk){
-                        printf("error!!!!!\n");
+                        av_log(avctx, AV_LOG_ERROR,"error!!!!!\n");
                         *got_frame = 0;
                     }else{
                         *got_frame = 1;
                     }
                 } else {
-                    printf("Failed to assemble the big frame.\n");
+                    av_log(avctx, AV_LOG_ERROR,"Failed to assemble the big frame.\n");
                 }
             } else {
-                printf("Added a frame but not full yet.\n");
+                av_log(avctx, AV_LOG_DEBUG,"Added a frame but not full yet.\n");
             }
         }
 		av_packet_free(&spkt);

@@ -198,7 +198,7 @@ static AVFrame** cut_yuv420p_frame(AVFrame* input_frame, int blk_w, int blk_h, i
             output_frames[y * num_x_blocks + x]->format = AV_PIX_FMT_YUV420P;
 
             if (av_frame_get_buffer(output_frames[y * num_x_blocks + x], 32) < 0) {
-                fprintf(stderr, "Could not allocate output frame data\n");
+                av_log(NULL,AV_LOG_ERROR,"Could not allocate output frame data\n");
                 return NULL; // Handle error appropriately
             }
 
@@ -255,7 +255,7 @@ static AVFrame** cut_yuv420p_frame(AVFrame* input_frame, int blk_w, int blk_h, i
 static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
     FILE* file = fopen(filename, "wb");
     if (!file) {
-        fprintf(stderr, "Could not open file %s for writing\n", filename);
+        av_log(NULL,AV_LOG_ERROR,"Could not open file %s for writing\n", filename);
         return;
     }
 
@@ -273,7 +273,7 @@ static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
 static void dump_yuv_to_fp(AVFrame* frame, const FILE* file) {
     
     if (!file) {
-        fprintf(stderr, "Could not open file for writing\n");
+        av_log(NULL,AV_LOG_ERROR,"Could not open file for writing\n");
         return;
     }
 
