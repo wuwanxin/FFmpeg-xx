@@ -536,6 +536,7 @@ static av_cold int omx_component_init(AVCodecContext *avctx, const char *role)
         CHECK(err);
         avc.nBFrames = 0;
         avc.nPFrames = avctx->gop_size - 1;
+        av_log(avctx, AV_LOG_DEBUG, "omx 264 set nBFrames:%d nPFrames:%d \n",avc.nBFrames,avc.nPFrames);
         switch (s->profile == FF_PROFILE_UNKNOWN ? avctx->profile : s->profile) {
         case FF_PROFILE_H264_BASELINE:
             avc.eProfile = OMX_VIDEO_AVCProfileBaseline;
