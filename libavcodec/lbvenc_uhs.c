@@ -550,9 +550,8 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     //alloc
     base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(ctx->base_codec);
     ctx->base_codec_id = base_codec_id;
-    //continuous_encoding
-    ctx->continuous_encoding = 1;
 
+    //continuous_encoding
 #ifdef __Xilinx_ZCU106__
     ctx->continuous_encoding = 0;
 #endif
@@ -662,15 +661,15 @@ once:
                 }
 #endif
                 
-                if(i == 0){
-                    output_frames[i]->pict_type = AV_PICTURE_TYPE_I;
-                }else if(i == 1){
-                    output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
-                }else{
-                    output_frames[i]->pict_type = AV_PICTURE_TYPE_B;
-                }
-
                 if( i < num_blocks ){
+                    if(i == 0){
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_I;
+                    }else if(i == 1){
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
+                    }else{
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_B;
+                    }
+
                     if(base_encode_function(ctx->baseenc_ctx,output_frames[i],&tmp_pkt,1) < 0){
                         av_log(avctx, AV_LOG_ERROR,"base_encode_function err \n");
                         av_packet_free(&tmp_pkt);
@@ -767,6 +766,15 @@ once:
                         av_packet_free(&tmp_pkt);
                 
                     }
+                    add_frame_header(curr);
+                        
+                    ret = frame_time_checking(curr,ctx->set_framerate,ctx);
+                    if(ret < 0){
+                        av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
+                        return ret;
+                    }
+                    av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
+
                     //malloc pkt
                     ret = av_new_packet(pkt , curr->merged_packet->size);
                     if(ret < 0){
@@ -865,6 +873,7 @@ static const AVOption lbvc_uhs_options[] = {
     {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
+    {"continuous_encoding", "set continuous encoding", OFFSET(continuous_encoding), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "continuous_encoding"},
     {NULL} // end flag
 };
 
