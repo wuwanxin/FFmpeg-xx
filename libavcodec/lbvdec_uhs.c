@@ -67,10 +67,11 @@ static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
     fclose(file);
 }
 
-static int __lbvdec_uhs_init_basecodec(LowBitrateDecoderUHSContext *ctx) {
+static int __lbvdec_uhs_init_basecodec(AVCodecContext *avctx) {
+    LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
     AVCodec *basedec_codec;
     enum AVCodecID base_codec_id = ctx->base_codec_id;
-    #ifdef __Xilinx_ZCU106__
+#ifdef __Xilinx_ZCU106__
     //zcu106 use hw codec by openmax
     if(base_codec_id == AV_CODEC_ID_H264){
         basedec_codec = avcodec_find_encoder_by_name("h264_omx");
@@ -345,7 +346,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
         return 0;
     }
 
-    ret = __lbvdec_uhs_init_basecodec(ctx);
+    ret = __lbvdec_uhs_init_basecodec(avctx);
     if(ret < 0){
         return ret;
     }

@@ -59,6 +59,7 @@ typedef struct {
 
     //encoder options
     int base_codec;
+    enum AVCodecID base_codec_id;
 
     int w;
     int h;
@@ -77,6 +78,8 @@ typedef struct {
 
     int64_t pts; // Used to track the current PTS
     int time_base; // Time base
+
+    int continuous_encoding;
 	
 } LowBitrateEncoderUHSContext;
 
@@ -278,6 +281,55 @@ static AVFrame** cut_yuv420p_frame(AVFrame* input_frame, int blk_w, int blk_h, i
     return output_frames;
 }
 
+static AVFrame* __conver_yuv420p_frame_to_nv12(AVFrame* input_frame){
+    // Allocate an AVFrame instance
+    AVFrame *frame = av_frame_alloc();
+    if (!frame) {
+        fprintf(stderr, "Could not allocate memory for AVFrame\n");
+        return NULL;
+    }
+
+    // Set parameters for the AVFrame
+    frame->format = AV_PIX_FMT_NV12; // NV12 format
+    frame->width = input_frame->width;
+    frame->height = input_frame->height;
+
+    int width = frame->width;
+    int height = frame->height;
+
+    // Allocate buffer for the image data
+    int ret = av_frame_get_buffer(frame, 1); // 1 is the alignment requirement; can be adjusted as needed
+    if (ret < 0) {
+        fprintf(stderr, "Could not allocate frame data\n");
+        av_frame_free(&frame);
+        return NULL;
+    }
+
+    // Assuming the data in buffer is in the order of Y, U, V (YUV 420P format)
+    int y_plane_size = width * height;
+    int uv_plane_size = (width / 2) * (height / 2);
+    uint8_t *u_buffer = input_frame->data[1];
+    uint8_t *v_buffer = input_frame->data[2];
+
+    // Copy Y plane data
+    memcpy(frame->data[0], input_frame->data[0], y_plane_size);
+
+    // Prepare UV plane data in NV12 format
+    uint8_t *uv_plane = frame->data[1];
+    for (int h = 0; h < height / 2; h++) {
+        for (int w = 0; w < width / 2; w++) {
+            // U and V values are interleaved in NV12 format
+            uv_plane[2 * (h * (width / 2) + w)] = u_buffer[(h * (width / 2) + w)];        // U
+            uv_plane[2 * (h * (width / 2) + w) + 1] = v_buffer[(h * (width / 2) + w)];    // V
+        }
+    }
+
+    // Set timestamp information (optional, depending on use case)
+    frame->pts = 0;  // Set the presentation timestamp (PTS) for the frame
+    
+    return frame;
+}
+
 // Dump YUV data to file
 static void dump_yuv_to_file(AVFrame* frame, const char* filename) {
     FILE* file = fopen(filename, "wb");
@@ -319,18 +371,27 @@ static int base_encode_function(AVCodecContext *basectx, AVFrame *frame, AVPacke
 
     int ret = -1;
     AVCodecContext *enc_ctx = basectx; 
-
+    AVFrame *dst_frame = frame;
     if(frame ){
-        ret = avcodec_send_frame(enc_ctx, frame);
+#if __Xilinx_ZCU106__
+        dst_frame = __conver_yuv420p_frame_to_nv12(frame);
+#endif
+        ret = avcodec_send_frame(enc_ctx, dst_frame);
         if (ret < 0) {
             av_log( basectx,AV_LOG_ERROR,"baseenc send frame err \n");
+#if __Xilinx_ZCU106__
+            av_frame_free(&dst_frame); // Free each frame's memory
+#endif
             return ret;
         }
         av_log( basectx,AV_LOG_DEBUG,"baseenc send frame down \n");
     }else{
         av_log( basectx,AV_LOG_DEBUG,"baseenc send frame null \n");
     }
-    
+#if __Xilinx_ZCU106__
+    av_frame_free(&dst_frame); // Free each frame's memory
+#endif
+
     if(!receive_flag){
         goto end;
     }
@@ -372,9 +433,96 @@ end:
     return 0;
 }
 
+static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base_codec_id ) {
+    AVCodec *baseenc_codec;
+    LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
+    
+    #ifdef __Xilinx_ZCU106__
+    //zcu106 use hw codec by openmax
+    if(base_codec_id == AV_CODEC_ID_H264){
+        baseenc_codec = avcodec_find_encoder_by_name("h264_omx");
+    }else{
+        av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
+        return AVERROR_UNKNOWN;
+    }
+#else
+    baseenc_codec = avcodec_find_encoder(base_codec_id);
+    if (!baseenc_codec) {
+        return AVERROR_UNKNOWN;
+    }
+#endif
+    ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
+    if (!ctx->baseenc_ctx) {
+        return AVERROR(ENOMEM);
+    }
+
+    //init baseenc ctx
+    ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
+    ctx->baseenc_ctx->width = ctx->set_blk_w;
+    ctx->baseenc_ctx->height = ctx->set_blk_h;
+#ifdef __Xilinx_ZCU106__
+    ctx->baseenc_ctx->time_base = (AVRational){1 , ctx->num_blk * 1 };
+#else
+    ctx->baseenc_ctx->time_base = (AVRational){1 , ctx->num_blk * ctx->set_framerate };
+#endif
+    ctx->baseenc_ctx->gop_size = ctx->num_blk;
+    ctx->baseenc_ctx->keyint_min = ctx->num_blk;
+    ctx->baseenc_ctx->slice_count = 1;
+    ctx->baseenc_ctx->refs = 3;
+    ctx->baseenc_ctx->has_b_frames = 1;
+    ctx->baseenc_ctx->max_b_frames = 2;
+    ctx->baseenc_ctx->thread_count = 1;
+#ifdef __Xilinx_ZCU106__
+    ctx->baseenc_ctx->framerate = (AVRational){ ctx->num_blk * 1, 1};
+#else
+    ctx->baseenc_ctx->framerate = (AVRational){ ctx->num_blk * ctx->set_framerate, 1};
+#endif
+    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init set gop-size  %d. \n",ctx->num_blk);
+#ifdef __Xilinx_ZCU106__
+    ctx->baseenc_ctx->profile = FF_PROFILE_H264_HIGH;
+    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_NV12;
+#else
+    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+#endif
+    av_opt_set(ctx->baseenc_ctx->priv_data,"slice_mode","1",0);
+
+    if(strcmp(baseenc_codec->name,"libx264") == 0){
+        //use x264
+        //ban scenecut
+        char params[10240];
+		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
+	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
+    }else{
+        av_log(avctx, AV_LOG_DEBUG,"baseenc_codec->name:%s \n",baseenc_codec->name);
+        //return -1;
+    }
+	
+
+    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "preset", "fast", 0); 
+    av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+        avcodec_free_context(&ctx->baseenc_ctx);
+        return AVERROR_UNKNOWN;
+    }
+    av_dict_free(&opts);
+    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 down. \n");
+
+    return 0;
+}
+
+static int __lbvc_uhs_basecodec_free(AVCodecContext *avctx){
+    LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
+    avcodec_free_context(&ctx->baseenc_ctx);
+    return 0;
+}
 
 static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     enum AVCodecID base_codec_id;
+    int ret = 0;
+    
     AVCodec *baseenc_codec;
 
     av_log(avctx, AV_LOG_DEBUG,"__lbvc_uhs_init enter! \n");
@@ -401,75 +549,22 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     
     //alloc
     base_codec_id = lbvenc_common_trans_internal_base_codecid_to_codecid(ctx->base_codec);
+    ctx->base_codec_id = base_codec_id;
+
+    //continuous_encoding
+#ifdef __Xilinx_ZCU106__
+    ctx->continuous_encoding = 0;
+#endif
+    if(ctx->continuous_encoding){
+        ret = __lbvc_uhs_basecodec_init(avctx,base_codec_id);
+    }
     
-#ifdef __Xilinx_ZCU106__
-    //zcu106 use hw codec by openmax
-    if(base_codec_id == AV_CODEC_ID_H264){
-        baseenc_codec = avcodec_find_encoder_by_name("h264_omx");
-    }else{
-        av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
-        return AVERROR_UNKNOWN;
-    }
-#else
-    baseenc_codec = avcodec_find_encoder(base_codec_id);
-    if (!baseenc_codec) {
-        return AVERROR_UNKNOWN;
-    }
-#endif
-    ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
-    if (!ctx->baseenc_ctx) {
-        return AVERROR(ENOMEM);
-    }
-
-    //init baseenc ctx
-    ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
-    ctx->baseenc_ctx->width = ctx->set_blk_w;
-    ctx->baseenc_ctx->height = ctx->set_blk_h;
-    ctx->baseenc_ctx->time_base = (AVRational){1 , ctx->num_blk * ctx->set_framerate };
-    ctx->baseenc_ctx->gop_size = ctx->num_blk;
-    ctx->baseenc_ctx->keyint_min = ctx->num_blk;
-    ctx->baseenc_ctx->slice_count = 1;
-    ctx->baseenc_ctx->refs = 3;
-    ctx->baseenc_ctx->has_b_frames = 1;
-    ctx->baseenc_ctx->max_b_frames = 2;
-    ctx->baseenc_ctx->thread_count = 1;
-    ctx->baseenc_ctx->framerate = (AVRational){ ctx->num_blk * ctx->set_framerate, 1};
-#ifdef __Xilinx_ZCU106__
-    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_NV12;
-#else
-    ctx->baseenc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-#endif
-    av_opt_set(ctx->baseenc_ctx->priv_data,"slice_mode","1",0);
-
-    if(strcmp(baseenc_codec->name,"libx264") == 0){
-        //use x264
-        //ban scenecut
-        char params[10240];
-		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
-	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
-    }else{
-        return -1;
-    }
-	
-
-    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
-    AVDictionary *opts = NULL;
-    av_dict_set(&opts, "preset", "fast", 0); 
-    av_dict_set(&opts, "tune", "zerolatency", 0); 
-
-    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
-        avcodec_free_context(&ctx->baseenc_ctx);
-        return AVERROR_UNKNOWN;
-    }
-    av_dict_free(&opts);
-    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 down. \n");
-	
 	ctx->last_merge_pkt = NULL;
 	
 	// Set time base according to frame rate
     ctx->time_base = 90000;  // Assume time base is 1/90000
 
-    return 0;
+    return ret;
 }
 
 static int lbvc_uhs_encode(AVCodecContext *avctx, AVPacket *pkt,
@@ -484,6 +579,10 @@ static int lbvc_uhs_encode(AVCodecContext *avctx, AVPacket *pkt,
         return 0;
     }
     AVPacket *tmp_pkt;
+
+    if(!ctx->continuous_encoding){
+        ret = __lbvc_uhs_basecodec_init(avctx,ctx->base_codec_id);
+    }
 	
 	// Initialize the merge context
 	if(ctx->last_merge_pkt){
@@ -546,7 +645,7 @@ once:
             int64_t cut_process_time = av_gettime() - start_time; 
             av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame wait time:%lld\n",cut_process_time);
 			// Save each output frame to a file
-			for (int i = 0; i < num_blocks; i++) {
+			for (int i = 0; i < (num_blocks + 1); i++) {
 #if 0//dump frames
                 static int frames = 1;
 				char filename[256];
@@ -561,33 +660,121 @@ once:
                     dump_yuv_to_fp(output_frames[i], fp);
                 }
 #endif
-                if(base_encode_function(ctx->baseenc_ctx,output_frames[i],&tmp_pkt,1) < 0){
-                    av_log(avctx, AV_LOG_ERROR,"base_encode_function err \n");
-                    av_packet_free(&tmp_pkt);
-				    av_frame_free(&output_frames[i]); // Free each frame's memory
-					goto err;
-				}
-                if(tmp_pkt->size == 0){
-                    av_log(avctx, AV_LOG_DEBUG,"tmp_pkt return size 0,wait \n");
-                    av_packet_free(&tmp_pkt);
-				    av_frame_free(&output_frames[i]); // Free each frame's memory
-                    continue;
-                }
-
-                if(!full_flag && (tmp_pkt->flags & AV_PKT_FLAG_KEY) && (curr->pkt_count>0)){
-                    if(change_flag){
-                        full_flag = 1;
+                
+                if( i < num_blocks ){
+                    if(i == 0){
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_I;
+                    }else if(i == 1){
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
                     }else{
-                        change_flag = 1;
+                        output_frames[i]->pict_type = AV_PICTURE_TYPE_B;
+                    }
+
+                    if(base_encode_function(ctx->baseenc_ctx,output_frames[i],&tmp_pkt,1) < 0){
+                        av_log(avctx, AV_LOG_ERROR,"base_encode_function err \n");
+                        av_packet_free(&tmp_pkt);
+                        av_frame_free(&output_frames[i]); // Free each frame's memory
+                        goto err;
+                    }
+                
+                    if(tmp_pkt->size == 0){
+                        av_log(avctx, AV_LOG_DEBUG,"tmp_pkt return size 0,wait \n");
+                        av_packet_free(&tmp_pkt);
+                        av_frame_free(&output_frames[i]); // Free each frame's memory
+                        continue;
+                    }
+
+                    if(!full_flag && (tmp_pkt->flags & AV_PKT_FLAG_KEY) && (curr->pkt_count>0)){
+                        if(change_flag){
+                            full_flag = 1;
+                        }else{
+                            change_flag = 1;
+                        }
+                        add_frame_header(curr);
+                        
+                        ret = frame_time_checking(curr,ctx->set_framerate,ctx);
+                        if(ret < 0){
+                            av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
+                            return ret;
+                        }
+                        av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
+                        //malloc pkt
+                        ret = av_new_packet(pkt , curr->merged_packet->size);
+                        if(ret < 0){
+                            av_log(avctx, AV_LOG_ERROR,"av_new_packet error\n");
+                            return ret;
+                        }
+                        av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs packet size:%d  count:%d(ctx->num_blk:%d)\n",pkt->size,merge_ctx->pkt_count,ctx->num_blk);
+                        memcpy(pkt->data,curr->merged_packet->data,pkt->size);
+                        *got_packet = 1;
+                        //pkt->pts = ctx->pts;
+                        //ctx->pts++;
+
+                        cleanup_merge_context(curr);
+
+                        next_merge_ctx = (MergeContext *)av_malloc(sizeof(MergeContext));
+                        if(init_merge_context(next_merge_ctx,ctx) < 0){
+                            return -1;
+                        }
+                        curr = next_merge_ctx;
+                        ctx->last_merge_pkt = next_merge_ctx;
+
+                    }
+                
+                    if(add_packet_to_merge(curr, tmp_pkt) < 0){
+                        av_log(avctx, AV_LOG_ERROR,"add_packet_to_merge err, curr 0x%08x , err at %d blk\n",curr,curr->pkt_count);
+                    }else{
+                        av_log(avctx, AV_LOG_DEBUG,"add_packet_to_merge down, curr 0x%08x , now save %d blks \n",curr,curr->pkt_count);
+                    }
+                
+                    // Free the packet after use
+                    av_packet_free(&tmp_pkt);
+				    av_frame_free(&output_frames[i]); // Free each frame's memory
+                }else{
+                    if(ctx->continuous_encoding){
+                        break;
+                    }
+                    //flush
+                    ret = avcodec_send_frame(ctx->baseenc_ctx, NULL);
+                    if (ret < 0) {
+                        av_log( avctx,AV_LOG_ERROR,"baseenc flush frame err \n");
+
+                        return ret;
+                    }
+                    
+                    while (ret >= 0) {
+                        tmp_pkt = av_packet_alloc();
+                        if (!tmp_pkt) {
+                            av_log( avctx,AV_LOG_DEBUG, "Could not allocate AVPacket\n");
+                            return -1; // Handle allocation error appropriately
+                        }
+                        ret = avcodec_receive_packet(ctx->baseenc_ctx, tmp_pkt);
+                        // Copy data from pkt to str if pkt has data
+                        if ((tmp_pkt->size > 0) && (tmp_pkt->data)) {
+                            av_log( avctx,AV_LOG_DEBUG,"baseenc avcodec_receive_packet key:%d\n",(tmp_pkt->flags & AV_PKT_FLAG_KEY));
+                            //ping - pong
+                        } else {
+                            av_log( avctx,AV_LOG_DEBUG, "No data generated.\n");
+                        }
+                        if(add_packet_to_merge(curr, tmp_pkt) < 0){
+                            av_log(avctx, AV_LOG_ERROR,"add_packet_to_merge err, curr 0x%08x , err at %d blk\n",curr,curr->pkt_count);
+                        }else{
+                            av_log(avctx, AV_LOG_DEBUG,"add_packet_to_merge down, curr 0x%08x , now save %d blks \n",curr,curr->pkt_count);
+                        }
+                    
+                        // Free the packet after use
+                        av_packet_free(&tmp_pkt);
+                
                     }
                     add_frame_header(curr);
-                    
+                        
                     ret = frame_time_checking(curr,ctx->set_framerate,ctx);
                     if(ret < 0){
                         av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
                         return ret;
                     }
                     av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
+
                     //malloc pkt
                     ret = av_new_packet(pkt , curr->merged_packet->size);
                     if(ret < 0){
@@ -602,24 +789,8 @@ once:
 
                     cleanup_merge_context(curr);
 
-                    next_merge_ctx = (MergeContext *)av_malloc(sizeof(MergeContext));
-                    if(init_merge_context(next_merge_ctx,ctx) < 0){
-                        return -1;
-                    }
-                    curr = next_merge_ctx;
-                    ctx->last_merge_pkt = next_merge_ctx;
-
-				}
-                
-                if(add_packet_to_merge(curr, tmp_pkt) < 0){
-                    av_log(avctx, AV_LOG_ERROR,"add_packet_to_merge err, curr 0x%08x , err at %d blk\n",curr,curr->pkt_count);
-                }else{
-                    av_log(avctx, AV_LOG_DEBUG,"add_packet_to_merge down, curr 0x%08x , now save %d blks \n",curr,curr->pkt_count);
+                    ctx->last_merge_pkt = NULL;
                 }
-             
-                // Free the packet after use
-                av_packet_free(&tmp_pkt);
-				av_frame_free(&output_frames[i]); // Free each frame's memory
 			}
             
 			// Release resources
@@ -644,10 +815,22 @@ once:
 		// Update PTS
 		ctx->pts += frame_interval; // Increment timestamp
         //ctx->last_merge_pkt = next_merge_ctx;
+
+        if(!ctx->continuous_encoding){
+            ret = __lbvc_uhs_basecodec_free(avctx);
+            if(ret < 0){
+                return -1;
+            }
+        }
 	}else{
-        av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs  count:%d(ctx->num_blk:%d)\n",pkt->size,merge_ctx->pkt_count,ctx->num_blk);
+        av_log(avctx, AV_LOG_DEBUG,"lbvenc uhs  count:%d(ctx->num_blk:%d)\n",merge_ctx->pkt_count,ctx->num_blk);
 		
         //ctx->last_merge_pkt = merge_ctx;
+
+        if(!ctx->continuous_encoding){
+            av_log(avctx, AV_LOG_WARNING,"lbvenc uhs  no continuous_encoding should flush every frame\n");
+            return -1;
+        }
         goto got_no_data;
     }
     
@@ -690,6 +873,7 @@ static const AVOption lbvc_uhs_options[] = {
     {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
+    {"continuous_encoding", "set continuous encoding", OFFSET(continuous_encoding), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "continuous_encoding"},
     {NULL} // end flag
 };
 
