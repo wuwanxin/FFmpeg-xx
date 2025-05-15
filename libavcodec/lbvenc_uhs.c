@@ -80,7 +80,6 @@ typedef struct {
     int time_base; // Time base
 
     int continuous_encoding;
-    int strict_time_check;
 	
 } LowBitrateEncoderUHSContext;
 
@@ -575,6 +574,11 @@ static int lbvc_uhs_encode(AVCodecContext *avctx, AVPacket *pkt,
 	MergeContext *merge_ctx;
 	MergeContext *next_merge_ctx;
     int ret = -1;
+    int blk_w ; // Block width
+    int blk_h ; // Block height
+    int num_blocks = 0;
+    int full_flag = 0;
+    int change_flag = 0;
     if(!frame){
         *got_packet = 0;
         return 0;
@@ -630,11 +634,11 @@ once:
 
     switch(frame->format){
         case AV_PIX_FMT_YUV420P:
-			int blk_w = ctx->baseenc_ctx->width; // Block width
-			int blk_h = ctx->baseenc_ctx->height; // Block height
-			int num_blocks = 0;
-            int full_flag = 0;
-            int change_flag = 0;
+			blk_w = ctx->baseenc_ctx->width; // Block width
+			blk_h = ctx->baseenc_ctx->height; // Block height
+			num_blocks = 0;
+            full_flag = 0;
+            change_flag = 0;
             MergeContext *curr = merge_ctx;
 
 			// Cut the YUV420P frame
@@ -695,8 +699,8 @@ once:
                         
                         ret = frame_time_checking(curr,ctx->set_framerate,ctx);
                         if(ret < 0){
-                            av_log(avctx, AV_LOG_WARNING,"frame_time_checking error\n");
-                            if(ctx->strict_time_check) return ret;
+                            av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
+                            return ret;
                         }
                         av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
                         //malloc pkt
@@ -870,12 +874,11 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 #define OFFSET(x) offsetof(LowBitrateEncoderUHSContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption lbvc_uhs_options[] = {
-    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 100000, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
+    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
     {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
     {"continuous_encoding", "set continuous encoding", OFFSET(continuous_encoding), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "continuous_encoding"},
-    {"strict_time_check", "strict time checking", OFFSET(strict_time_check), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "strict_time_check"},
     {NULL} // end flag
 };
 
