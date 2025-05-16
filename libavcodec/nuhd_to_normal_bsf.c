@@ -62,6 +62,7 @@ static void dump_data_to_file(const uint8_t *buf,int buf_size, const char* filen
 }
 #define MAX_FRAME_BLK 200
 
+#if CONFIG_LIBLBVC_ENCODER
 static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
 {   
     GetByteContext gb;
@@ -141,7 +142,7 @@ fail:
     av_packet_free(&in);
     return -1;    
 }
-
+#endif
 static void modify_bytestream(GetByteContext gb,int start,int size) {
     
     const uint8_t seq1[] = {0x00, 0x00, 0x01};
@@ -472,9 +473,11 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
             ret = filter_e2e(ctx,out);
             break;
 #endif
+#if CONFIG_LIBLBVC_UHS_ENCODER
         case AV_CODEC_ID_LBVC_UHS:
             ret = filter_uhs(ctx,out);
             break;
+#endif
         default:
             return -1;
     }

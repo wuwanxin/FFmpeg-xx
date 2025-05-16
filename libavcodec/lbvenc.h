@@ -32,8 +32,9 @@ typedef struct {
 	int coded_h;
 } LBVC_UHS_DEC_SIDEDATA;
 
+#if CONFIG_LIBLBVC_UHS_ENCODER
 int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx);
 
 int lbvc_read_dec_block_size_data(const AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) ;
-
+#endif
 #endif

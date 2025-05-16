@@ -193,7 +193,7 @@ int lbvenc_enhance_data_opaque_preprocess(H2645SEILbvencEnhanceData lbvenc_enhan
 #define SIDE_DATA_TYPE_BLOCK_SIZE 1 // Custom side data type
 
 
-
+#if CONFIG_LIBLBVC_UHS_ENCODER
 int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) {
     if (!block_size_data) {
         av_log(logctx, AV_LOG_ERROR,"Invalid LBVC_UHS_DEC_SIDEDATA pointer\n");
@@ -234,3 +234,4 @@ int lbvc_read_dec_block_size_data(const AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *bl
     }
     return 0;
 }
+#endif

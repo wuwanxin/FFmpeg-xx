@@ -28,6 +28,8 @@ typedef struct {
     AVClass *class;
     e2e_t* e2e_hanle;
     e2e_init_t* config;
+
+    int set_quality;
 } e2eEncoderContext;
 
 
@@ -48,7 +50,7 @@ static av_cold int e2enc_init(AVCodecContext *avctx) {
     config->format = 0;
     config->gop_size = 1;
     config->frames = 1;
-    config->quality = 8;
+    config->quality = ctx->set_quality;
 
 
     e2e_handle = e2e_encoder_init(config);
@@ -153,10 +155,17 @@ static av_cold int e2enc_close(AVCodecContext *avctx) {
     return ret;
 }
 
+#define OFFSET(x) offsetof(e2eEncoderContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption e2e_options[] = {
+    {"quality", "set the quality of enc", OFFSET(set_quality), AV_OPT_TYPE_INT, {.i64 = 8}, 1, 8, VE, "set_quality"},
+    {NULL} // end flag
+};
+
 static const AVClass e2enc_class = {
     .class_name = "e2enc_class",
     .item_name  = av_default_item_name,
-    .option     = NULL,
+    .option     = e2e_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
