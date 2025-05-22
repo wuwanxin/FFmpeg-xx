@@ -65,6 +65,7 @@ typedef struct {
     int h;
 	
     int set_bitrate;
+    int set_quality;
     float set_framerate;
 	int set_blk_w;
 	int set_blk_h;
@@ -80,6 +81,7 @@ typedef struct {
     int time_base; // Time base
 
     int continuous_encoding;
+    int strict_time_check;
 	
 } LowBitrateEncoderUHSContext;
 
@@ -457,7 +459,20 @@ static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base
     }
 
     //init baseenc ctx
-    ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
+    AVDictionary *opts = NULL;
+    if(ctx->set_bitrate == -1){
+        char crf_str[20];
+        snprintf(crf_str,sizeof(crf_str),"%d",ctx->set_quality);
+        av_dict_set(&opts, "crf", crf_str, 0); 
+    }else{  
+        if(ctx->set_bitrate >= MIN_LBVC_UHS_BITRATE){
+            ctx->baseenc_ctx->bit_rate = ctx->set_bitrate;
+        }else{
+            av_log(avctx, AV_LOG_ERROR,"set_bitrate must >=  %d ,but  %d. \n",MIN_LBVC_UHS_BITRATE,ctx->set_bitrate);
+            return -1;
+        }
+        
+    }
     ctx->baseenc_ctx->width = ctx->set_blk_w;
     ctx->baseenc_ctx->height = ctx->set_blk_h;
 #ifdef __Xilinx_ZCU106__
@@ -468,9 +483,11 @@ static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base
     ctx->baseenc_ctx->gop_size = ctx->num_blk;
     ctx->baseenc_ctx->keyint_min = ctx->num_blk;
     ctx->baseenc_ctx->slice_count = 1;
-    ctx->baseenc_ctx->refs = 3;
-    ctx->baseenc_ctx->has_b_frames = 1;
-    ctx->baseenc_ctx->max_b_frames = 2;
+	if(base_codec_id == AV_CODEC_ID_H264){
+	    ctx->baseenc_ctx->refs = 3;
+	    ctx->baseenc_ctx->has_b_frames = 1;
+	    ctx->baseenc_ctx->max_b_frames = 2;
+	}
     ctx->baseenc_ctx->thread_count = 1;
 #ifdef __Xilinx_ZCU106__
     ctx->baseenc_ctx->framerate = (AVRational){ ctx->num_blk * 1, 1};
@@ -486,28 +503,45 @@ static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base
 #endif
     av_opt_set(ctx->baseenc_ctx->priv_data,"slice_mode","1",0);
 
-    if(strcmp(baseenc_codec->name,"libx264") == 0){
+    if((base_codec_id == AV_CODEC_ID_H264) &&  strcmp(baseenc_codec->name,"libx264") == 0){
         //use x264
         //ban scenecut
         char params[10240];
 		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
 	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
+		
+	    av_dict_set(&opts, "preset", "fast", 0); 
+	    av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+	    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+	        avcodec_free_context(&ctx->baseenc_ctx);
+	        return AVERROR_UNKNOWN;
+	    }
+	    
+    }else if((base_codec_id == AV_CODEC_ID_HEVC) &&  strcmp(baseenc_codec->name,"libx265") == 0){
+        //use x265
+        //ban scenecut
+        char params[10240];
+		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
+	    av_opt_set(ctx->baseenc_ctx->priv_data, "x265-params",params , 0);
+		
+		av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
+	    av_dict_set(&opts, "preset", "medium", 0); 
+	    //av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+	    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+	        avcodec_free_context(&ctx->baseenc_ctx);
+	        return AVERROR_UNKNOWN;
+	    }
+	    
+        
     }else{
         av_log(avctx, AV_LOG_DEBUG,"baseenc_codec->name:%s \n",baseenc_codec->name);
         //return -1;
     }
-	
+	av_dict_free(&opts);
 
-    av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
-    AVDictionary *opts = NULL;
-    av_dict_set(&opts, "preset", "fast", 0); 
-    av_dict_set(&opts, "tune", "zerolatency", 0); 
-
-    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
-        avcodec_free_context(&ctx->baseenc_ctx);
-        return AVERROR_UNKNOWN;
-    }
-    av_dict_free(&opts);
+    
     av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 down. \n");
 
     return 0;
@@ -519,7 +553,7 @@ static int __lbvc_uhs_basecodec_free(AVCodecContext *avctx){
     return 0;
 }
 
-static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
+static int __lbvc_uhs_init(AVCodecContext *avctx) {
     enum AVCodecID base_codec_id;
     int ret = 0;
     
@@ -527,8 +561,7 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
 
     av_log(avctx, AV_LOG_DEBUG,"__lbvc_uhs_init enter! \n");
     LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
-    // init encoders
-    ctx->base_codec = 0; //defalut, now only support 264
+    
 
     system("mkdir ./testout");
     
@@ -565,6 +598,21 @@ static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
     ctx->time_base = 90000;  // Assume time base is 1/90000
 
     return ret;
+}
+
+static av_cold int lbvc_uhs_init(AVCodecContext *avctx) {
+    LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
+    // init encoders
+    ctx->base_codec = 0;
+    return __lbvc_uhs_init(avctx);
+    
+}
+
+static av_cold int hlbvc_uhs_init(AVCodecContext *avctx) {
+    LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
+    // init encoders
+    ctx->base_codec = 1; 
+    return __lbvc_uhs_init(avctx);
 }
 
 static int lbvc_uhs_encode(AVCodecContext *avctx, AVPacket *pkt,
@@ -669,11 +717,12 @@ once:
                 if( i < num_blocks ){
                     if(i == 0){
                         output_frames[i]->pict_type = AV_PICTURE_TYPE_I;
-                    }else if(i == 1){
-                        output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
-                    }else{
-                        output_frames[i]->pict_type = AV_PICTURE_TYPE_B;
                     }
+                    //else if(i == 1){
+                    //     output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
+                    // }else{
+                    //     output_frames[i]->pict_type = AV_PICTURE_TYPE_B;
+                    // }
 
                     if(base_encode_function(ctx->baseenc_ctx,output_frames[i],&tmp_pkt,1) < 0){
                         av_log(avctx, AV_LOG_ERROR,"base_encode_function err \n");
@@ -699,8 +748,8 @@ once:
                         
                         ret = frame_time_checking(curr,ctx->set_framerate,ctx);
                         if(ret < 0){
-                            av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
-                            return ret;
+                            av_log(avctx, AV_LOG_WARNING,"frame_time_checking error\n");
+                            if(ctx->strict_time_check) return ret;
                         }
                         av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
                         //malloc pkt
@@ -775,8 +824,8 @@ once:
                         
                     ret = frame_time_checking(curr,ctx->set_framerate,ctx);
                     if(ret < 0){
-                        av_log(avctx, AV_LOG_ERROR,"frame_time_checking error\n");
-                        return ret;
+                        av_log(avctx, AV_LOG_WARNING,"frame_time_checking error\n");
+                        if(ctx->strict_time_check) return ret;
                     }
                     av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame down merge_ctx->merged_packet->size:%d\n",curr->merged_packet->size);
 
@@ -874,11 +923,13 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 #define OFFSET(x) offsetof(LowBitrateEncoderUHSContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption lbvc_uhs_options[] = {
-    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = 4000000}, 800000, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
+    {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = -1}, -1, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
+    {"quality", "set quality ", OFFSET(set_quality), AV_OPT_TYPE_INT, {.i64 = 28}, 0, 51, VE, "set_quality"},
     {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
     {"continuous_encoding", "set continuous encoding", OFFSET(continuous_encoding), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "continuous_encoding"},
+    {"strict_time_check", "strict time checking", OFFSET(strict_time_check), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, VE, "strict_time_check"},
     {NULL} // end flag
 };
 
@@ -922,4 +973,22 @@ FFCodec ff_liblbvc_uhs_encoder = {
                       ,
 };
 
+FFCodec ff_libhlbvc_uhs_encoder = {
+    .p.name           = "hlbvc_uhs",
+    CODEC_LONG_NAME("libhqbo lbvenc High Effective Low Bitrate Video Encoder :: Version-Ultra High Resolution"),
+    .p.type           = AVMEDIA_TYPE_VIDEO,
+    .p.id             = AV_CODEC_ID_HLBVC_UHS,
+    .p.capabilities   = AV_CODEC_CAP_DR1 ,
+    .p.priv_class     = &lbvc_uhs_class,
+    .p.wrapper_name   = "hlbvc_uhs",
+    .priv_data_size   = sizeof(LowBitrateEncoderUHSContext),
+    .init             = hlbvc_uhs_init,
+    FF_CODEC_ENCODE_CB(lbvc_uhs_encode),
+    .flush            = lbvc_uhs_flush,
+    .close            = lbvc_uhs_close,
+    .defaults         = lbvc_uhs_defaults,
+    .p.pix_fmts       = pix_fmts_all,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
+                      ,
+};
 

@@ -25,6 +25,7 @@ int lbvenc_common_trans_codecid_to_internal_base_codecid(enum AVCodecID);
 
 //uhs
 #define MAX_LBVC_UHS_BITRATE (40000000)
+#define MIN_LBVC_UHS_BITRATE (100000)
 typedef struct {
     int blk_w; // Block width
     int blk_h; // Block height
@@ -32,9 +33,9 @@ typedef struct {
 	int coded_h;
 } LBVC_UHS_DEC_SIDEDATA;
 
-#if CONFIG_LIBLBVC_UHS_ENCODER
+
 int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx);
 
 int lbvc_read_dec_block_size_data(const AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) ;
-#endif
+
 #endif

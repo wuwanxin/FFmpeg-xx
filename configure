@@ -3414,6 +3414,8 @@ liblbvc_hevc_encoder_deps="liblbvc_hevc"
 libhlbvc_encoder_deps="libhlbvc"
 liblbvc_uhs_encoder_deps="liblbvc_uhs"
 liblbvc_uhs_decoder_deps="liblbvc_uhs"
+libhlbvc_uhs_encoder_deps="libhlbvc_uhs"
+libhlbvc_uhs_decoder_deps="libhlbvc_uhs"
 libzvbi_teletext_decoder_deps="libzvbi"
 vapoursynth_demuxer_deps="vapoursynth"
 videotoolbox_suggest="coreservices"
@@ -6965,7 +6967,7 @@ if enabled nuhd; then
         disable lbvdec
     fi
     if enabled liblbvc_uhs;then
-        enable liblbvc_uhs && echo "enable nuhd uhs"
+        enable liblbvc_uhs && enable libhlbvc_uhs && echo "enable nuhd uhs , huhs"
     fi
     if disabled libe2e && disabled liblbvc && disabled liblbvc_uhs; then
         disable nuhd_to_normal_bsf && echo "disable nuhd bsf nuhd_to_normal"

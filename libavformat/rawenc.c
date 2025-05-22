@@ -68,6 +68,17 @@ const FFOutputFormat ff_lbvc_uhs_muxer = {
     .write_packet      = ff_raw_write_packet,
     .p.flags           = AVFMT_NOTIMESTAMPS,
 };
+const FFOutputFormat ff_hlbvc_uhs_muxer = {
+    .p.name            = "hlbvc_uhs",
+    .p.long_name       = NULL_IF_CONFIG_SMALL("High Effective raw lbvc uhs"),
+    .p.extensions      = "huhs",
+    .p.audio_codec     = AV_CODEC_ID_NONE,
+    .p.video_codec     = AV_CODEC_ID_HLBVC_UHS,
+    .init              = force_one_stream,
+    .write_packet      = ff_raw_write_packet,
+    .p.flags           = AVFMT_NOTIMESTAMPS,
+};
+
 #endif
 
 #if CONFIG_AC3_MUXER

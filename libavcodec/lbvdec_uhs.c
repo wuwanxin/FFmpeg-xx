@@ -19,6 +19,7 @@
 #include "lbvenc.h"
 #include "h2645_parse.h"
 #include "h264.h"
+#include "hevc.h"
 #include "decode.h"
 #include <float.h>
 #include <math.h>
@@ -106,14 +107,12 @@ static int __lbvdec_uhs_free_basecodec(LowBitrateDecoderUHSContext *ctx){
     return 0;
 }
 
-static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
+static int __lbvdec_uhs_init(AVCodecContext *avctx) {
     enum AVCodecID base_codec_id;
     
     int ret;
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init enter! \n");
     LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
-    // init encoders
-    ctx->base_codec = 0; //defalut, now only support 264
 
     system("mkdir ./testout");
     
@@ -141,6 +140,20 @@ static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
 
     av_log(avctx, AV_LOG_DEBUG,"lbvdec_uhs_init down! \n");
     return 0;
+}
+
+static av_cold int lbvdec_uhs_init(AVCodecContext *avctx) {
+    LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
+    // init encoders
+    ctx->base_codec = 0; 
+    return __lbvdec_uhs_init(avctx);
+}
+
+static av_cold int hlbvdec_uhs_init(AVCodecContext *avctx) {
+    LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
+    // init encoders
+    ctx->base_codec = 1; 
+    return __lbvdec_uhs_init(avctx);
 }
 
 
@@ -379,7 +392,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
 #endif
     H2645Packet h264_pkts;
     memset(&h264_pkts,0x0,sizeof(H2645Packet));
-    ret = ff_h2645_packet_split(&h264_pkts, avpkt->data, avpkt->size, avctx, 0, 0 ,AV_CODEC_ID_H264, 0, 0);
+    ret = ff_h2645_packet_split(&h264_pkts, avpkt->data, avpkt->size, avctx, 0, 0 ,ctx->base_codec_id, 0, 0);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR,"Error splitting the input into NAL units.\n");
         return ret;
@@ -404,7 +417,11 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
             
             switch (nal->type) {
                 case H264_NAL_IDR_SLICE:
-                case H264_NAL_SLICE:
+                case H264_NAL_SLICE: 
+                case HEVC_NAL_IDR_N_LP: 
+                case HEVC_NAL_TRAIL_N:
+                //HEVC_NAL_TRAIL_R is the same value with H264_NAL_SLICE
+                //case HEVC_NAL_TRAIL_R:
                     found_data = 1;
                     found_counter++;
                 default:
@@ -564,5 +581,21 @@ FFCodec ff_liblbvc_uhs_decoder = {
     .p.priv_class     = &lbvdec_uhs_class,
     .bsfs           = "nuhd_to_normal",
     .p.wrapper_name = "lbvdec_uhs",
+};
+
+FFCodec ff_libhlbvc_uhs_decoder = {
+    .p.name           = "hlbvdec_uhs",
+    CODEC_LONG_NAME("libhqbo lbvenc High Effective Low Bitrate Video Decoder :: Version-Ultra High Resolution"),
+    .p.type           = AVMEDIA_TYPE_VIDEO,
+    .p.id             = AV_CODEC_ID_HLBVC_UHS,
+    .priv_data_size   = sizeof(LowBitrateDecoderUHSContext),
+    .init             = hlbvdec_uhs_init,
+    FF_CODEC_DECODE_CB(lbvdec_uhs_decode),
+    .close            = lbvdec_uhs_close,
+    .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS,
+    .p.priv_class     = &lbvdec_uhs_class,
+    .bsfs           = "nuhd_to_normal",
+    .p.wrapper_name = "hlbvdec_uhs",
 };
 

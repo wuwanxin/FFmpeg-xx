@@ -30,6 +30,7 @@
 #include "bytestream.h"
 #include "lbvenc.h"
 #include "libavutil/time.h"
+#include "config_components.h"
 #define ALIGN(a,b) (((a) + ((b) - 1)) / (b) * (b))
 
 static av_cold int init(AVBSFContext *ctx)
@@ -42,7 +43,8 @@ static av_cold int init(AVBSFContext *ctx)
             break;
         case AV_CODEC_ID_LBVC_HEVC:
         case AV_CODEC_ID_HLBVC:
-            ctx->par_out->codec_id = AV_CODEC_ID_NUHD_NORMAL_HEVC;
+        case AV_CODEC_ID_HLBVC_UHS:
+            ctx->par_out->codec_id = AV_CODEC_ID_H265;//AV_CODEC_ID_NUHD_NORMAL_HEVC;
             break;     
     }
     
@@ -62,7 +64,7 @@ static void dump_data_to_file(const uint8_t *buf,int buf_size, const char* filen
 }
 #define MAX_FRAME_BLK 200
 
-#if CONFIG_LIBLBVC_ENCODER
+#if CONFIG_LIBLBVC_UHS_ENCODER
 static int filter_uhs(AVBSFContext *ctx, AVPacket *out)
 {   
     GetByteContext gb;
@@ -475,6 +477,7 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
 #endif
 #if CONFIG_LIBLBVC_UHS_ENCODER
         case AV_CODEC_ID_LBVC_UHS:
+		case AV_CODEC_ID_HLBVC_UHS:
             ret = filter_uhs(ctx,out);
             break;
 #endif
@@ -487,7 +490,7 @@ static int filter(AVBSFContext *ctx, AVPacket *out)
 
 const FFBitStreamFilter ff_nuhd_to_normal_bsf = {
     .p.name         = "nuhd_to_normal",
-    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_LBVC_HEVC, AV_CODEC_ID_HLBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_LBVC_UHS, AV_CODEC_ID_NONE },
+    .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_LBVC, AV_CODEC_ID_LBVC_HEVC, AV_CODEC_ID_HLBVC, AV_CODEC_ID_E2ENC, AV_CODEC_ID_LBVC_UHS, AV_CODEC_ID_HLBVC_UHS, AV_CODEC_ID_NONE },
     .init           = init,
     .filter         = filter,
 };

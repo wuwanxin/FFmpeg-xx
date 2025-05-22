@@ -76,6 +76,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
     },
     {
+        .id        = AV_CODEC_ID_HLBVC_UHS,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "hlbvc_uhs",
+        .long_name = NULL_IF_CONFIG_SMALL("High effective Low-Bitrate-Codec video Ultra High Resolution"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
         .id        = AV_CODEC_ID_E2ENC,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "e2enc",

@@ -224,3 +224,12 @@ const AVCodecParser ff_lbvc_uhs_parser = {
     .parser_parse   = lbvc_uhs_parse,
     .parser_close   = ff_parse_close,
 };
+
+const AVCodecParser ff_hlbvc_uhs_parser = {
+    .codec_ids      = { AV_CODEC_ID_HLBVC_UHS },
+    .priv_data_size = sizeof(LBVCUHSParser),
+    .parser_init    = lbvc_uhs_parse_init,
+    .parser_parse   = lbvc_uhs_parse,
+    .parser_close   = ff_parse_close,
+};
+

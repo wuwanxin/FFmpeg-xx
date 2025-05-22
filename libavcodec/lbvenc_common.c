@@ -194,7 +194,7 @@ int lbvenc_enhance_data_opaque_preprocess(H2645SEILbvencEnhanceData lbvenc_enhan
 
 
 #if CONFIG_LIBLBVC_UHS_ENCODER
-int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx) {
+int lbvc_add_dec_block_size_data(AVPacket *pkt, LBVC_UHS_DEC_SIDEDATA *block_size_data, void *logctx){
     if (!block_size_data) {
         av_log(logctx, AV_LOG_ERROR,"Invalid LBVC_UHS_DEC_SIDEDATA pointer\n");
         return -1;
