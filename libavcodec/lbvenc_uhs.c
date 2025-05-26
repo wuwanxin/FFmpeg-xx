@@ -66,6 +66,7 @@ typedef struct {
 	
     int set_bitrate;
     int set_quality;
+    int set_blk_line_fresh;
     float set_framerate;
 	int set_blk_w;
 	int set_blk_h;
@@ -698,6 +699,10 @@ once:
             int64_t cut_process_time = av_gettime() - start_time; 
             av_log(avctx, AV_LOG_DEBUG,"cut_yuv420p_frame wait time:%lld\n",cut_process_time);
 			// Save each output frame to a file
+
+            int num_x_blocks = (frame->width + blk_w - 1) / blk_w; // Ensure rounding up
+            int num_y_blocks = (frame->height + blk_h - 1) / blk_h; // Ensure rounding up
+            int set_i_pos = 0;
 			for (int i = 0; i < (num_blocks + 1); i++) {
 #if 0//dump frames
                 static int frames = 1;
@@ -715,8 +720,9 @@ once:
 #endif
                 
                 if( i < num_blocks ){
-                    if(i == 0){
+                    if( i == set_i_pos ){
                         output_frames[i]->pict_type = AV_PICTURE_TYPE_I;
+                        if(ctx->set_blk_line_fresh) set_i_pos+=((num_x_blocks*ctx->set_blk_line_fresh)+1);
                     }
                     //else if(i == 1){
                     //     output_frames[i]->pict_type = AV_PICTURE_TYPE_P;
@@ -738,7 +744,7 @@ once:
                         continue;
                     }
 
-                    if(!full_flag && (tmp_pkt->flags & AV_PKT_FLAG_KEY) && (curr->pkt_count>0)){
+                    if(!full_flag && (tmp_pkt->flags & AV_PKT_FLAG_KEY) && (curr->pkt_count==ctx->num_blk)){
                         if(change_flag){
                             full_flag = 1;
                         }else{
@@ -925,6 +931,7 @@ static av_cold int lbvc_uhs_close(AVCodecContext *avctx) {
 static const AVOption lbvc_uhs_options[] = {
     {"bitrate", "set bitrate ", OFFSET(set_bitrate), AV_OPT_TYPE_INT, {.i64 = -1}, -1, MAX_LBVC_UHS_BITRATE, VE, "set_bitrate"},
     {"quality", "set quality ", OFFSET(set_quality), AV_OPT_TYPE_INT, {.i64 = 28}, 0, 51, VE, "set_quality"},
+    {"bl_fresh", "set block line fresh ", OFFSET(set_blk_line_fresh), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 3, VE, "set_blk_line_fresh"},
     {"framerate", "set framerate ", OFFSET(set_framerate), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.01, 5.0, VE, "set_framerate"},
     {"blk_w", "set the w of enc blk ", OFFSET(set_blk_w), AV_OPT_TYPE_INT, {.i64 = 1920}, 0, 7680, VE, "set_blk_w"},
     {"blk_h", "set the h of enc blk", OFFSET(set_blk_h), AV_OPT_TYPE_INT, {.i64 = 1088}, 0, 4320, VE, "set_blk_h"},
