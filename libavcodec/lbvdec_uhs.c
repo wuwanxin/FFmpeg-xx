@@ -72,20 +72,43 @@ static int __lbvdec_uhs_init_basecodec(AVCodecContext *avctx) {
     LowBitrateDecoderUHSContext *ctx = avctx->priv_data;
     AVCodec *basedec_codec;
     enum AVCodecID base_codec_id = ctx->base_codec_id;
-#ifdef __Xilinx_ZCU106__
-    //zcu106 use hw codec by openmax
     if(base_codec_id == AV_CODEC_ID_H264){
-        basedec_codec = avcodec_find_encoder_by_name("h264_omx");
+#ifdef __Xilinx_ZCU106__
+        //zcu106 use hw codec by openmax
+        basedec_codec = avcodec_find_decoder_by_name("h264_omx");
+#else
+        #if CONFIG_H264_NI_QUADRA_DECODER_off
+        av_log(avctx, AV_LOG_DEBUG,"codec h264_ni_quadra_dec \n");
+        basedec_codec = avcodec_find_decoder_by_name("h264_ni_quadra_dec");
+        #else
+        basedec_codec = avcodec_find_decoder(base_codec_id);
+        #endif
+        if (!basedec_codec) {
+            av_log(avctx, AV_LOG_ERROR,"264 decoder init error \n");
+            return AVERROR_UNKNOWN;
+        }
+#endif
+    }else if(base_codec_id == AV_CODEC_ID_H265){
+#ifdef __Xilinx_ZCU106__
+        //zcu106 use hw codec by openmax
+        basedec_codec = NULL;
+    
+#else
+        #if CONFIG_H265_NI_QUADRA_DECODER_off
+        av_log(avctx, AV_LOG_DEBUG,"codec h265_ni_quadra_dec \n");
+        basedec_codec = avcodec_find_decoder_by_name("h265_ni_quadra_dec");
+        #else
+        basedec_codec = avcodec_find_decoder(base_codec_id);
+        #endif
+        if (!basedec_codec) {
+            av_log(avctx, AV_LOG_ERROR,"265 decoder init error \n");
+            return AVERROR_UNKNOWN;
+        }
+#endif
     }else{
         av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
         return AVERROR_UNKNOWN;
     }
-#else
-    basedec_codec = avcodec_find_decoder(base_codec_id);
-    if (!basedec_codec) {
-        return AVERROR_UNKNOWN;
-    }
-#endif
     ctx->basedec_ctx = avcodec_alloc_context3(basedec_codec);
     if (!ctx->basedec_ctx) {
         return AVERROR(ENOMEM);
@@ -94,6 +117,8 @@ static int __lbvdec_uhs_init_basecodec(AVCodecContext *avctx) {
     //init baseenc ctx
    
     ctx->basedec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    ctx->basedec_ctx->width = ctx->set_blk_w;
+    ctx->basedec_ctx->height= ctx->set_blk_h;
     
     if (avcodec_open2(ctx->basedec_ctx, basedec_codec, NULL) < 0) {
         avcodec_free_context(&ctx->basedec_ctx);
@@ -359,11 +384,6 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
         return 0;
     }
 
-    ret = __lbvdec_uhs_init_basecodec(avctx);
-    if(ret < 0){
-        return ret;
-    }
-
     if(!ctx->num_blk){
         if((ctx->set_blk_w==0) || (ctx->set_blk_h==0)){
             LBVC_UHS_DEC_SIDEDATA data = {0};
@@ -377,6 +397,12 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
         }
         ctx->num_blk = ((avctx->coded_width + ( ctx->set_blk_w - 1 )) / ctx->set_blk_w) * ((avctx->coded_height + ( ctx->set_blk_h - 1 )) / ctx->set_blk_h);
         av_log(avctx, AV_LOG_DEBUG,"yuv file num_blks %d \n",ctx->num_blk);
+    }
+
+    ret = __lbvdec_uhs_init_basecodec(avctx);
+    if(ret < 0){
+        av_log(avctx, AV_LOG_ERROR,"__lbvdec_uhs_init_basecodec error\n");
+        return ret;
     }
     
     basedec_ctx = ctx->basedec_ctx;
@@ -420,6 +446,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                 case H264_NAL_SLICE: 
                 case HEVC_NAL_IDR_N_LP: 
                 case HEVC_NAL_TRAIL_N:
+                case HEVC_NAL_IDR_W_RADL:
                 //HEVC_NAL_TRAIL_R is the same value with H264_NAL_SLICE
                 //case HEVC_NAL_TRAIL_R:
                     found_data = 1;
@@ -460,6 +487,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                 av_log(avctx,AV_LOG_ERROR," not enough blks has been receieved. \n ");
                 return -1;
             }
+            av_log(avctx,AV_LOG_DEBUG," base decoder flush all frames \n ");
             ret = avcodec_send_packet(basedec_ctx, NULL);
             if ((ret < 0) && (ret != AVERROR(EAGAIN))) {
                 av_log(avctx, AV_LOG_ERROR, "Dec error happened.\n");
@@ -520,7 +548,7 @@ static int lbvdec_uhs_decode(AVCodecContext *avctx, AVFrame *pict,
                     av_log(avctx, AV_LOG_ERROR,"Failed to assemble the big frame.\n");
                 }
             } else {
-                av_log(avctx, AV_LOG_DEBUG,"Added a frame but not full yet.\n");
+                av_log(avctx, AV_LOG_DEBUG,"Added a frame but not full yet. now get %d blks.\n",current_count);
             }
         }
 		av_packet_free(&spkt);

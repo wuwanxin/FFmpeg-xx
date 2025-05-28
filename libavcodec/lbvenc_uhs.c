@@ -440,20 +440,38 @@ static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base
     AVCodec *baseenc_codec;
     LowBitrateEncoderUHSContext *ctx = avctx->priv_data;
     
-    #ifdef __Xilinx_ZCU106__
-    //zcu106 use hw codec by openmax
     if(base_codec_id == AV_CODEC_ID_H264){
+#if defined(__Xilinx_ZCU106__)
+        //zcu106 use hw codec by openmax
         baseenc_codec = avcodec_find_encoder_by_name("h264_omx");
+#else
+        #if CONFIG_H264_NI_QUADRA_ENCODER
+        baseenc_codec = avcodec_find_encoder_by_name("h264_ni_quadra_enc");
+        #else
+        baseenc_codec = avcodec_find_encoder(base_codec_id);
+        #endif
+#endif
+        if (!baseenc_codec) {
+            return AVERROR_UNKNOWN;
+        }
+    }else if(base_codec_id == AV_CODEC_ID_H265){
+#ifdef __Xilinx_ZCU106__
+        //zcu106 use hw codec by openmax
+        baseenc_codec = NULL;
+#else
+        #if CONFIG_H264_NI_QUADRA_ENCODER
+        baseenc_codec = avcodec_find_encoder_by_name("h265_ni_quadra_enc");
+        #else
+        baseenc_codec = avcodec_find_encoder(base_codec_id);
+        #endif
+#endif
+        if (!baseenc_codec) {
+            return AVERROR_UNKNOWN;
+        }
     }else{
         av_log(avctx, AV_LOG_ERROR,"codec not support(%d) \n",base_codec_id);
         return AVERROR_UNKNOWN;
     }
-#else
-    baseenc_codec = avcodec_find_encoder(base_codec_id);
-    if (!baseenc_codec) {
-        return AVERROR_UNKNOWN;
-    }
-#endif
     ctx->baseenc_ctx = avcodec_alloc_context3(baseenc_codec);
     if (!ctx->baseenc_ctx) {
         return AVERROR(ENOMEM);
@@ -504,43 +522,77 @@ static int __lbvc_uhs_basecodec_init(AVCodecContext *avctx , enum AVCodecID base
 #endif
     av_opt_set(ctx->baseenc_ctx->priv_data,"slice_mode","1",0);
 
-    if((base_codec_id == AV_CODEC_ID_H264) &&  strcmp(baseenc_codec->name,"libx264") == 0){
-        //use x264
-        //ban scenecut
-        char params[10240];
-		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
-	    av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
-		
-	    av_dict_set(&opts, "preset", "fast", 0); 
-	    av_dict_set(&opts, "tune", "zerolatency", 0); 
 
-	    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
-	        avcodec_free_context(&ctx->baseenc_ctx);
-	        return AVERROR_UNKNOWN;
-	    }
-	    
-    }else if((base_codec_id == AV_CODEC_ID_HEVC) &&  strcmp(baseenc_codec->name,"libx265") == 0){
-        //use x265
-        //ban scenecut
-        char params[10240];
-		snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
-	    av_opt_set(ctx->baseenc_ctx->priv_data, "x265-params",params , 0);
-		
-		av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
-	    av_dict_set(&opts, "preset", "medium", 0); 
-	    //av_dict_set(&opts, "tune", "zerolatency", 0); 
+    if(base_codec_id == AV_CODEC_ID_H264){  
+        if(strcmp(baseenc_codec->name,"libx264") == 0){
+            //use x264
+            //ban scenecut
+            char params[10240];
+            snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
+            av_opt_set(ctx->baseenc_ctx->priv_data, "x264-params",params , 0);
+            
+            av_dict_set(&opts, "preset", "fast", 0); 
+            av_dict_set(&opts, "tune", "zerolatency", 0); 
 
-	    if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
-	        avcodec_free_context(&ctx->baseenc_ctx);
-	        return AVERROR_UNKNOWN;
-	    }
+            if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+                avcodec_free_context(&ctx->baseenc_ctx);
+                return AVERROR_UNKNOWN;
+            }
 	    
-        
+        }else if(strcmp(baseenc_codec->name,"h264_ni_quadra_enc") == 0){
+            char params[10240];
+            snprintf(params, sizeof(params), "roiEnable=0",NULL);
+            av_opt_set(ctx->baseenc_ctx->priv_data, "-xcoder-params",params , 0);
+            
+            av_dict_set(&opts, "preset", "fast", 0); 
+            av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+            if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+                avcodec_free_context(&ctx->baseenc_ctx);
+                return AVERROR_UNKNOWN;
+            }
+	    
+        }else{
+            av_log(avctx, AV_LOG_ERROR,"[avc]baseenc_codec->name:%s not support \n",baseenc_codec->name);
+            return -1;
+        }
+    }else if((base_codec_id == AV_CODEC_ID_HEVC)){
+        if (strcmp(baseenc_codec->name,"libx265") == 0){
+            //use x265
+            //ban scenecut
+            char params[10240];
+            snprintf(params, sizeof(params), "scenecut=0,deblock=2:2",NULL);
+            av_opt_set(ctx->baseenc_ctx->priv_data, "x265-params",params , 0);
+            
+            av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 start. \n");
+            av_dict_set(&opts, "preset", "medium", 0); 
+            //av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+            if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+                avcodec_free_context(&ctx->baseenc_ctx);
+                return AVERROR_UNKNOWN;
+            }
+        }else if(strcmp(baseenc_codec->name,"h265_ni_quadra_enc") == 0){
+            char params[10240];
+            snprintf(params, sizeof(params), "roiEnable=0",NULL);
+            av_opt_set(ctx->baseenc_ctx->priv_data, "-xcoder-params",params , 0);
+            
+            av_dict_set(&opts, "preset", "fast", 0); 
+            av_dict_set(&opts, "tune", "zerolatency", 0); 
+
+            if (avcodec_open2(ctx->baseenc_ctx, baseenc_codec, &opts) < 0) {
+                avcodec_free_context(&ctx->baseenc_ctx);
+                return AVERROR_UNKNOWN;
+            }
+        }else{
+            av_log(avctx, AV_LOG_ERROR,"[hevc]baseenc_codec->name:%s not support \n",baseenc_codec->name);
+            return -1;
+        }
     }else{
         av_log(avctx, AV_LOG_DEBUG,"baseenc_codec->name:%s \n",baseenc_codec->name);
         //return -1;
     }
-	av_dict_free(&opts);
+	if(opts) av_dict_free(&opts);
 
     
     av_log(avctx, AV_LOG_DEBUG,"lbvc_uhs_init avcodec_open2 down. \n");
