@@ -3423,6 +3423,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     size_t sd_size;
     HEVCContext *s = avctx->priv_data;
 
+    //nuhd add
+    uint8_t *nuhd_extradata_buffer;
+    AVDictionary *nuhd_metadata = NULL;
+
     if (!avpkt->size) {
         ret = ff_hevc_output_frame(s, rframe, 1);
         if (ret < 0)
@@ -3431,7 +3435,15 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         *got_output = ret;
         return 0;
     }
+    av_log(avctx, AV_LOG_DEBUG,
+                   "hevc_decode_frame get packet size:%d\n ",avpkt->size);
 
+#if 0
+    static FILE *check_receive_decode = NULL;
+    if(!check_receive_decode) check_receive_decode = fopen("check_receive_decode.bin","w"); // compare with check_bsf.bin
+    if(check_receive_decode) fwrite(avpkt->data,1,avpkt->size,check_receive_decode);
+    fflush(check_receive_decode);
+#endif
     sd = av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA, &sd_size);
     if (sd && sd_size > 0) {
         ret = hevc_decode_extradata(s, sd, sd_size, 0);
@@ -3465,6 +3477,12 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
                 return ret;
             }
         }
+#if CONFIG_LIBLBVC_ENCODER
+        if(s->sei.lbvenc_enhance_data.present){
+            lbvenc_enhance_data_opaque_preprocess(s->sei.lbvenc_enhance_data,&s->output_frame->opaque);
+        }
+#endif
+
     }
     s->sei.picture_hash.is_md5 = 0;
 
@@ -3474,6 +3492,9 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     }
 
     if (s->output_frame->buf[0]) {
+        //nuhd add
+        
+        av_log(avctx, AV_LOG_DEBUG, "Move frame POC %d. frame 0x%08x\n", s->poc,rframe);
         av_frame_move_ref(rframe, s->output_frame);
         *got_output = 1;
     }

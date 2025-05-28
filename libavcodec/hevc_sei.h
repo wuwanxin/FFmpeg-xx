@@ -30,6 +30,9 @@
 #include "h2645_sei.h"
 #include "sei.h"
 
+//nuhd_add
+#include "lbvenc.h"
+
 
 typedef enum {
         HEVC_SEI_PIC_STRUCT_FRAME_DOUBLING = 7,
@@ -112,6 +115,8 @@ typedef struct HEVCSEI {
     // NETINT: NI HEVC custom SEI
     HEVCSEINICustom ni_custom;
 #endif
+	//nuhd add 
+    H2645SEILbvencEnhanceData lbvenc_enhance_data;
 } HEVCSEI;
 
 struct HEVCParamSets;

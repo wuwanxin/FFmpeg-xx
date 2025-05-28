@@ -468,6 +468,12 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
             stream_type = STREAM_TYPE_PRIVATE_DATA;
         }
         break;
+    case AV_CODEC_ID_NUHD_NORMAL_H264:
+        stream_type = STREAM_TYPE_VIDEO_H264;
+        break;
+    case AV_CODEC_ID_NUHD_NORMAL_HEVC:
+        stream_type = STREAM_TYPE_VIDEO_HEVC;
+        break;
     default:
         av_log_once(s, AV_LOG_WARNING, AV_LOG_DEBUG, &ts_st->data_st_warning,
                     "Stream %d, codec %s, is muxed as a private data stream "
@@ -518,6 +524,12 @@ static int get_m2ts_stream_type(AVFormatContext *s, AVStream *st)
         break;
     case AV_CODEC_ID_HDMV_TEXT_SUBTITLE:
         stream_type = 0x92;
+        break;
+    case AV_CODEC_ID_NUHD_NORMAL_H264:
+        stream_type = STREAM_TYPE_VIDEO_H264;
+        break;
+    case AV_CODEC_ID_NUHD_NORMAL_HEVC:
+        stream_type = STREAM_TYPE_VIDEO_HEVC;
         break;
     default:
         av_log_once(s, AV_LOG_WARNING, AV_LOG_DEBUG, &ts_st->data_st_warning,

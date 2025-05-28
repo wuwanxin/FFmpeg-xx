@@ -329,6 +329,10 @@ External library support:
   --disable-vulkan         disable Vulkan code [autodetect]
   --disable-xlib           disable xlib [autodetect]
   --disable-zlib           disable zlib [autodetect]
+  --enable-nuhd            enable nuhd codecs support
+  --enable-libe2e          enable nuhd codecs support
+  --enable-liblbvc         enable nuhd codecs support
+  --enable-liblbvc_uhs     enable nuhd codecs support
 
   The following libraries provide various hardware acceleration features:
   --disable-amf            disable AMF video encoding code [autodetect]
@@ -1778,6 +1782,10 @@ EXTERNAL_LIBRARY_NONFREE_LIST="
     decklink
     libfdk_aac
     libtls
+    nuhd
+    libe2e
+    liblbvc
+    liblbvc_uhs
 "
 
 EXTERNAL_LIBRARY_VERSION3_LIST="
@@ -3437,6 +3445,15 @@ libx265_encoder_select="atsc_a53"
 libxavs_encoder_deps="libxavs"
 libxavs2_encoder_deps="libxavs2"
 libxvid_encoder_deps="libxvid"
+libe2e_decoder_deps="libe2e"
+libe2e_encoder_deps="libe2e"
+liblbvc_encoder_deps="liblbvc"
+liblbvc_hevc_encoder_deps="liblbvc_hevc"
+libhlbvc_encoder_deps="libhlbvc"
+liblbvc_uhs_encoder_deps="liblbvc_uhs"
+liblbvc_uhs_decoder_deps="liblbvc_uhs"
+libhlbvc_uhs_encoder_deps="libhlbvc_uhs"
+libhlbvc_uhs_decoder_deps="libhlbvc_uhs"
 libzvbi_teletext_decoder_deps="libzvbi"
 vapoursynth_demuxer_deps="vapoursynth"
 videotoolbox_suggest="coreservices"
@@ -6971,6 +6988,31 @@ if enabled libxcb; then
     enabled libxcb_xfixes && check_pkg_config libxcb_xfixes xcb-xfixes xcb/xfixes.h xcb_xfixes_get_cursor_image
 fi
 
+if enabled nuhd; then
+    if enabled libe2e; then
+        enabled libe2e && check_pkg_config libe2e nuhd_e2e e2e/e2e_enc.h e2e_encode  || disable libe2e
+        if disabled libe2e; then
+            require libe2e_enc e2e/e2e_enc.h e2e_encode -le2e_enc && enable libe2e
+        fi
+    else
+        disable libe2e && echo "disable nuhd e2e"
+    fi
+    if enabled liblbvc; then
+        check_pkg_config liblbvc nuhd_sevc mediaass/sevc_enc.h sevc_encode_init && enable liblbvc && enable liblbvc_hevc && enable libhlbvc || disable liblbvc
+        if disabled liblbvc; then
+            require liblbvc mediaass/sevc_enc.h sevc_encode_init -llbvenc_host && enable liblbvc
+        fi
+    else
+        disable liblbvc && disable liblbvc_hevc && disable libhlbvc && echo "disable nuhd enhance codec liblbvc liblbvc_hevc libhlbvc"
+        disable lbvdec
+    fi
+    if enabled liblbvc_uhs;then
+        enable liblbvc_uhs && enable libhlbvc_uhs && echo "enable nuhd uhs , huhs"
+    fi
+    if disabled libe2e && disabled liblbvc && disabled liblbvc_uhs; then
+        disable nuhd_to_normal_bsf && echo "disable nuhd bsf nuhd_to_normal"
+    fi
+fi
 check_func_headers "windows.h" CreateDIBSection "$gdigrab_indev_extralibs"
 
 # d3d11va requires linking directly to dxgi and d3d11 if not building for

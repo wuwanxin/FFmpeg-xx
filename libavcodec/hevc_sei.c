@@ -52,7 +52,14 @@ static int decode_nal_sei_decoded_picture_hash(HEVCSEIPictureHash *s,
     }
     return 0;
 }
-
+#if CONFIG_LIBLBVC_ENCODER
+static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(H2645SEILbvencEnhanceData *s,
+                                               GetByteContext *gb,void *logctx)
+{
+    
+    return lbvenc_enhance_data_decode(s,gb,logctx);
+}
+#endif
 static int decode_nal_sei_mastering_display_info(HEVCSEIMasteringDisplay *s,
                                                  GetByteContext *gb)
 {
@@ -257,9 +264,14 @@ static int decode_nal_sei_prefix(GetBitContext *gb, GetByteContext *gbyte,
 static int decode_nal_sei_suffix(GetBitContext *gb, GetByteContext *gbyte,
                                  void *logctx, HEVCSEI *s, int type)
 {
+    av_log(logctx, AV_LOG_DEBUG, "decode_nal_sei_suffix type %d\n", type);
     switch (type) {
     case SEI_TYPE_DECODED_PICTURE_HASH:
         return decode_nal_sei_decoded_picture_hash(&s->picture_hash, gbyte);
+#if CONFIG_LIBLBVC_ENCODER
+    case SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA:
+        return decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&s->lbvenc_enhance_data, gbyte,logctx);
+#endif
     default:
         av_log(logctx, AV_LOG_DEBUG, "Skipped SUFFIX SEI %d\n", type);
         return 0;
@@ -297,6 +309,9 @@ static int decode_nal_sei_message(GetByteContext *gb, void *logctx, HEVCSEI *s,
         return decode_nal_sei_ni_custom(&s->ni_custom, gb, payload_size, s->ni_custom.location);
     }
 #endif
+	av_log(logctx, AV_LOG_DEBUG, "payload_type:%d\n",payload_type);
+    av_log(logctx, AV_LOG_DEBUG, "payload_size:%d\n",payload_size);
+    av_log(logctx, AV_LOG_DEBUG, "nal_unit_type:%d(HEVC_NAL_SEI_PREFIX-%d,NAL_SEI_SUFFIX-%d)\n",nal_unit_type,HEVC_NAL_SEI_PREFIX,HEVC_NAL_SEI_SUFFIX);
     bytestream2_init(&message_gbyte, gb->buffer, payload_size);
     ret = init_get_bits8(&message_gb, gb->buffer, payload_size);
     av_assert1(ret >= 0);
@@ -315,7 +330,12 @@ int ff_hevc_decode_nal_sei(GetBitContext *gb, void *logctx, HEVCSEI *s,
 {
     GetByteContext gbyte;
     int ret;
-
+    av_log(logctx, AV_LOG_DEBUG,"ff_hevc_decode_nal_sei sei size:%d\n",get_bits_left(gb) / 8);
+#if 0
+    FILE *fp = fopen("testout/debug_ff_hevc_decode_nal_sei.bin","wb");
+    fwrite(gb->buffer,1,get_bits_left(gb) / 8,fp);
+    fclose(fp);
+#endif
     av_assert1((get_bits_count(gb) % 8) == 0);
     bytestream2_init(&gbyte, gb->buffer + get_bits_count(gb) / 8,
                      get_bits_left(gb) / 8);
@@ -324,6 +344,7 @@ int ff_hevc_decode_nal_sei(GetBitContext *gb, void *logctx, HEVCSEI *s,
         ret = decode_nal_sei_message(&gbyte, logctx, s, ps, type);
         if (ret < 0)
             return ret;
+        av_log(logctx, AV_LOG_DEBUG,"decode_nal_sei_message down,left size:%d\n",bytestream2_get_bytes_left(&gbyte));    
     } while (bytestream2_get_bytes_left(&gbyte) > 0);
     return 1;
 }

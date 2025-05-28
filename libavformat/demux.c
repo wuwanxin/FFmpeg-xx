@@ -112,6 +112,10 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st,
         { "dvbsub",     AV_CODEC_ID_DVB_SUBTITLE, AVMEDIA_TYPE_SUBTITLE },
         { "dvbtxt",     AV_CODEC_ID_DVB_TELETEXT, AVMEDIA_TYPE_SUBTITLE },
         { "eac3",       AV_CODEC_ID_EAC3,         AVMEDIA_TYPE_AUDIO    },
+#if CONFIG_LBVC_UHS_MUXER
+        { "lbvc_uhs",   AV_CODEC_ID_LBVC_UHS,     AVMEDIA_TYPE_VIDEO    },
+        { "hlbvc_uhs",  AV_CODEC_ID_HLBVC_UHS,    AVMEDIA_TYPE_VIDEO    },
+#endif
         { "h264",       AV_CODEC_ID_H264,         AVMEDIA_TYPE_VIDEO    },
         { "hevc",       AV_CODEC_ID_HEVC,         AVMEDIA_TYPE_VIDEO    },
         { "loas",       AV_CODEC_ID_AAC_LATM,     AVMEDIA_TYPE_AUDIO    },

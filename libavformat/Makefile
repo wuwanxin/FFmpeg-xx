@@ -244,6 +244,7 @@ OBJS-$(CONFIG_H261_MUXER)                += rawenc.o
 OBJS-$(CONFIG_H263_DEMUXER)              += h263dec.o rawdec.o
 OBJS-$(CONFIG_H263_MUXER)                += rawenc.o
 OBJS-$(CONFIG_H264_DEMUXER)              += h264dec.o rawdec.o
+OBJS-$(CONFIG_E2E_DEMUXER)               += e2edec.o 
 OBJS-$(CONFIG_H264_MUXER)                += rawenc.o
 OBJS-$(CONFIG_HASH_MUXER)                += hashenc.o
 OBJS-$(CONFIG_HCA_DEMUXER)               += hca.o
@@ -639,6 +640,8 @@ OBJS-$(CONFIG_LIBGME_DEMUXER)            += libgme.o
 OBJS-$(CONFIG_LIBMODPLUG_DEMUXER)        += libmodplug.o
 OBJS-$(CONFIG_LIBOPENMPT_DEMUXER)        += libopenmpt.o
 OBJS-$(CONFIG_VAPOURSYNTH_DEMUXER)       += vapoursynth.o
+# nuhd add
+OBJS-$(CONFIG_LBVC_UHS_DEMUXER)          += lbvdec.o
 
 # protocols I/O
 OBJS-$(CONFIG_ASYNC_PROTOCOL)            += async.o

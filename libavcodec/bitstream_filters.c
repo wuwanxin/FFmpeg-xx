@@ -71,6 +71,9 @@ extern const FFBitStreamFilter ff_vp9_raw_reorder_bsf;
 extern const FFBitStreamFilter ff_vp9_superframe_bsf;
 extern const FFBitStreamFilter ff_vp9_superframe_split_bsf;
 
+// nuhd_to_normal (individual)
+extern const FFBitStreamFilter ff_nuhd_to_normal_bsf;
+
 #include "libavcodec/bsf_list.c"
 
 const AVBitStreamFilter *av_bsf_iterate(void **opaque)

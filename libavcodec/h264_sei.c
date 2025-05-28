@@ -262,6 +262,15 @@ static int decode_ni_custom(H264SEINICustom *h, GetBitContext *gb, int size)
 }
 #endif
 
+#if CONFIG_LIBLBVC_ENCODER
+static int decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(H2645SEILbvencEnhanceData *s,
+                                               GetByteContext *gb,void *logctx)
+{
+    
+    return lbvenc_enhance_data_decode(s,gb,logctx);
+}
+#endif
+
 int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
                        const H264ParamSets *ps, void *logctx)
 {
@@ -315,6 +324,11 @@ int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
         case SEI_TYPE_GREEN_METADATA:
             ret = decode_green_metadata(&h->green_metadata, &gbyte_payload);
             break;
+#if CONFIG_LIBLBVC_ENCODER
+        case SEI_TYPE_NUHD_LBVENC_ENHANCE_DATA:
+            ret = decode_nal_sei_decoded_nuhd_lbvenc_enhance_data(&h->lbvenc_enhance_data, &gbyte_payload,logctx);
+            break;
+#endif
         default:
             ret = ff_h2645_sei_message_decode(&h->common, type, AV_CODEC_ID_H264,
                                               &gb_payload, &gbyte_payload, logctx);

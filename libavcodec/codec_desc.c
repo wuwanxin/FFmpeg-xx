@@ -34,6 +34,62 @@
 static const AVCodecDescriptor codec_descriptors[] = {
     /* video codecs */
     {
+        .id        = AV_CODEC_ID_NUHD_NORMAL_H264,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "nuhd_normal",
+        .long_name = NULL_IF_CONFIG_SMALL("NUHD Internal to Normal avc"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_NUHD_NORMAL_HEVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "nuhd_normal_hevc",
+        .long_name = NULL_IF_CONFIG_SMALL("NUHD Internal to Normal hevc"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_LBVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "lbvenc",
+        .long_name = NULL_IF_CONFIG_SMALL("Low-Bitrate-Codec video"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_LBVC_HEVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "lbvenc_hevc",
+        .long_name = NULL_IF_CONFIG_SMALL("Low-Bitrate-Codec video base hevc"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_HLBVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "hlbvenc",
+        .long_name = NULL_IF_CONFIG_SMALL("High effective Low-Bitrate-Codec video"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_LBVC_UHS,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "lbvc_uhs",
+        .long_name = NULL_IF_CONFIG_SMALL("Low-Bitrate-Codec video Ultra High Resolution"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_HLBVC_UHS,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "hlbvc_uhs",
+        .long_name = NULL_IF_CONFIG_SMALL("High effective Low-Bitrate-Codec video Ultra High Resolution"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
+        .id        = AV_CODEC_ID_E2ENC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "e2enc",
+        .long_name = NULL_IF_CONFIG_SMALL("End to End Video Encode"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+    },
+    {
         .id        = AV_CODEC_ID_MPEG1VIDEO,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "mpeg1video",

@@ -1147,6 +1147,14 @@ OBJS-$(CONFIG_LIBXAVS2_ENCODER)           += libxavs2.o
 OBJS-$(CONFIG_LIBXVID_ENCODER)            += libxvid.o
 OBJS-$(CONFIG_LIBZVBI_TELETEXT_DECODER)   += libzvbi-teletextdec.o ass.o
 
+# lbvc (individual)
+#CONFIG_LIBLBVC_ENCODER
+OBJS-$(CONFIG_LIBLBVC_ENCODER)            += lbvenc.o lbvenc_common.o
+OBJS-$(CONFIG_LIBLBVC_UHS_ENCODER)        += lbvenc_uhs.o lbvenc_common.o
+OBJS-$(CONFIG_LIBLBVC_UHS_DECODER)        += lbvdec_uhs.o
+OBJS-$(CONFIG_LIBE2E_ENCODER)             += e2enc.o
+OBJS-$(CONFIG_LIBE2E_DECODER)             += e2edec.o
+
 # parsers
 OBJS-$(CONFIG_AAC_LATM_PARSER)         += latm_parser.o
 OBJS-$(CONFIG_AAC_PARSER)              += aac_parser.o aac_ac3_parser.o
@@ -1180,6 +1188,8 @@ OBJS-$(CONFIG_GSM_PARSER)              += gsm_parser.o
 OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
 OBJS-$(CONFIG_H263_PARSER)             += h263_parser.o
 OBJS-$(CONFIG_H264_PARSER)             += h264_parser.o h264data.o
+OBJS-$(CONFIG_E2ENC_PARSER)            += e2enc_parser.o
+OBJS-$(CONFIG_LBVC_UHS_PARSER)         += lbvc_parser.o
 OBJS-$(CONFIG_HEVC_PARSER)             += hevc_parser.o hevc_data.o
 OBJS-$(CONFIG_HDR_PARSER)              += hdr_parser.o
 OBJS-$(CONFIG_IPU_PARSER)              += ipu_parser.o
@@ -1264,6 +1274,8 @@ OBJS-$(CONFIG_VP9_METADATA_BSF)           += vp9_metadata_bsf.o
 OBJS-$(CONFIG_VP9_RAW_REORDER_BSF)        += vp9_raw_reorder_bsf.o
 OBJS-$(CONFIG_VP9_SUPERFRAME_BSF)         += vp9_superframe_bsf.o
 OBJS-$(CONFIG_VP9_SUPERFRAME_SPLIT_BSF)   += vp9_superframe_split_bsf.o
+# nuhd to normal (individual)
+OBJS-$(CONFIG_NUHD_TO_NORMAL_BSF)         += nuhd_to_normal_bsf.o
 
 # thread libraries
 OBJS-$(HAVE_LIBC_MSVCRT)               += file_open.o
@@ -1306,6 +1318,7 @@ SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h vdpau_internal.h
 SKIPHEADERS-$(CONFIG_VIDEOTOOLBOX)     += videotoolbox.h vt_internal.h
 SKIPHEADERS-$(CONFIG_V4L2_M2M)         += v4l2_buffers.h v4l2_context.h v4l2_m2m.h
 SKIPHEADERS-$(CONFIG_ZLIB)             += zlib_wrapper.h
+SKIPHEADERS-$(CONFIG_LBVC_ENCODER)     += lbvenc.h
 
 TESTPROGS = avcodec                                                     \
             avpacket                                                    \
